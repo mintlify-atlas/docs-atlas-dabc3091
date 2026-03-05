@@ -1,0 +1,278 @@
+---
+title: 'Architecture Overview'
+description: 'High-level architecture of the Procedural Pac-Man 3D game'
+---
+
+# Architecture Overview
+
+The Procedural Pac-Man 3D game follows a hierarchical architecture built on Three.js, organizing code into distinct layers that handle rendering, game logic, and component management.
+
+## Core Architecture Pattern
+
+The game uses a **layered architecture** with clear separation of concerns:
+
+```
+MyScene (Rendering Layer)
+    ↓
+MyGame (Game Logic Layer)
+    ↓
+Components (Maze, Characters, UI)
+```
+
+### Component Hierarchy
+
+```
+MyScene extends THREE.Scene
+├── Renderer (WebGLRenderer)
+├── Cameras (freeCam, topCam, sideCam)
+├── Lights (AmbientLight, SpotLight)
+├── MyGame extends THREE.Object3D
+│   ├── MyMaze (Procedural maze generation)
+│   ├── Characters (Pacman + 4 Ghosts)
+│   ├── Score & Level UI
+│   └── Controls Display
+└── MyMenu (Start screen)
+```
+
+<Info>
+The architecture uses Three.js's scene graph structure, where each component extends `THREE.Object3D` for automatic transform hierarchy and rendering.
+</Info>
+
+## Three.js Rendering Pipeline
+
+The game leverages Three.js's rendering pipeline with a custom shader material for the maze walls:
+
+### Initialization Flow
+
+```javascript
+// From MyScene.js:2-46
+class MyScene extends THREE.Scene {
+    constructor (myCanvas) {
+        super();
+        
+        // 1. Create renderer
+        this.renderer = this.createRenderer(myCanvas);
+        
+        // 2. Setup lighting
+        this.createLights();
+        
+        // 3. Setup cameras
+        this.createCamera();
+        
+        // 4. Initialize game logic
+        this.game = new MyGame(this.topCam);
+        
+        // 5. Create menu
+        this.menu = new MyMenu();
+        this.add(this.menu);
+    }
+}
+```
+
+### Rendering Configuration
+
+The renderer is configured for full-screen rendering with a black background:
+
+```javascript
+// From MyScene.js:105-121
+createRenderer (myCanvas) {
+    var renderer = new THREE.WebGLRenderer();
+    renderer.setClearColor(new THREE.Color(0x000000), 1.0);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    $(myCanvas).append(renderer.domElement);
+    return renderer;
+}
+```
+
+<Tip>
+The game uses jQuery for DOM manipulation, appending the Three.js canvas to a `#WebGL-output` div element.
+</Tip>
+
+## Main Game Loop Pattern
+
+The game implements a **continuous update loop** using `requestAnimationFrame`:
+
+```javascript
+// From MyScene.js:217-235
+update () {
+    // Request next frame
+    requestAnimationFrame(() => this.update());
+    
+    // Update camera controls
+    this.cameraControl.update();
+    
+    // Update game objects
+    this.game.title.lookAt(this.getCamera().position);
+    this.game.maze.update();
+    
+    // Update based on game state
+    if(this.status == "PACMAN") this.game.update();
+    else if(this.status == "MENU") this.menu.update();
+    
+    // Render the scene
+    this.renderer.render(this, this.getCamera());
+}
+```
+
+### Game State Management
+
+The game uses simple string-based state management:
+
+- **`"MENU"`** - Initial state showing the start menu
+- **`"PACMAN"`** - Active gameplay state
+
+State transitions occur through user interactions (clicking the play button).
+
+## Component Communication
+
+Components communicate through **direct references** and **method calls**:
+
+### MyScene → MyGame
+
+```javascript
+// From MyScene.js:206-212
+onMouseClick(event) {
+    if(pickedObjects.length > 0) {
+        this.remove(this.menu);
+        this.game.startGame();  // Direct method call
+        this.add(this.game);
+        this.status = "PACMAN";
+        this.changeCamera(2);
+    }
+}
+```
+
+### MyGame → Components
+
+```javascript
+// From MyGame.js:330-344
+update() {
+    if(this.start && this.characters[0].status == "alive") {
+        this.moveAI();           // Update ghost AI
+        this.collisionManager(); // Check collisions
+        this.controlTile();      // Check tile interactions
+        
+        if(this.maze.getDotNumber() == 0) {
+            this.nextLevel();    // Level progression
+        }
+    }
+    TWEEN.update(); // Update animations
+}
+```
+
+<Note>
+The game uses the TWEEN.js library for smooth animations, particularly for ghost behavior transitions.
+</Note>
+
+## Key Design Patterns
+
+### 1. Composition over Inheritance
+
+All game objects extend `THREE.Object3D`, composing functionality through contained objects rather than deep inheritance hierarchies.
+
+### 2. Procedural Generation
+
+The maze is generated procedurally using a Tetris-piece-based algorithm, creating unique layouts each game:
+
+```javascript
+// From MyMaze.js:387-483
+mazeGenerator() {
+    var tetris3 = this.tetris3x3Generator();
+    // Mirrors tetris layout for symmetry
+    // Adds portals and fills with dots
+    // Returns 30x30 maze data
+}
+```
+
+### 3. Data-Driven Rendering
+
+The maze structure is stored as a 2D array, where each cell type determines rendering:
+
+- **0** = Wall (with shader material)
+- **1** = Empty space
+- **2** = Dot (collectible)
+- **3** = Power pill
+- **4** = Teleport portal
+
+### 4. Event-Driven Input
+
+Input handling is centralized in `MyScene` through event listeners:
+
+```javascript
+// From MyScene.js:239-252
+$(function () {
+    var scene = new MyScene("#WebGL-output");
+    
+    window.addEventListener("resize", () => scene.onWindowResize());
+    window.addEventListener("keydown", (event) => scene.onKeyDown(event));
+    window.addEventListener("mousemove", (event) => scene.onMouseMove(event));
+    window.addEventListener("click", (event) => scene.onMouseClick(event));
+    
+    scene.update();
+});
+```
+
+## Performance Considerations
+
+### Efficient Collision Detection
+
+Collision detection is optimized by only checking adjacent tiles:
+
+```javascript
+// From MyMaze.js:583-611
+checkCollision(hitbox, pos, dir) {
+    // Only check 3 tiles in movement direction
+    for(var i = pos_aux - 1; i <= pos_aux + 1 && !collision; i++) {
+        // Check intersection with tile hitbox
+    }
+}
+```
+
+### Object Pooling
+
+Characters are respawned rather than recreated, reducing garbage collection:
+
+```javascript
+// From MyGame.js:277-289
+respawn() {
+    this.leaveBoxAnimation.stop();
+    
+    for(var i = 0; i < 5; i++) {
+        this.remove(this.characters[0]);
+        this.characters[0].dispose();
+        this.characters.shift();
+    }
+    
+    this.createCharacters();
+}
+```
+
+<Tip>
+The game includes an FPS counter via stats.js for performance monitoring during development.
+</Tip>
+
+## External Dependencies
+
+### Core Libraries
+
+- **Three.js** - 3D rendering engine
+- **jQuery** - DOM manipulation
+- **TrackballControls** - Camera controls for free camera
+- **TWEEN.js** - Animation library
+- **astar.js** - A* pathfinding for ghost AI
+- **dat.GUI** - Debug GUI (optional)
+
+### Custom Shaders
+
+The game includes custom GLSL shaders for procedural Voronoi patterns on maze walls, defined inline in `index.html:57-134`.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Scene Structure" icon="cube" href="/architecture/scene-structure">
+    Learn about cameras, lights, and scene organization
+  </Card>
+  <Card title="Game Loop" icon="rotate" href="/architecture/game-loop">
+    Deep dive into the update cycle and game logic
+  </Card>
+</CardGroup>

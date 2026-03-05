@@ -1,0 +1,376 @@
+---
+title: MyMaze
+description: Procedural maze generator using Tetris-piece algorithm with pathfinding support
+---
+
+## Overview
+
+`MyMaze` extends `THREE.Object3D` and generates procedurally created Pac-Man mazes using a unique Tetris-piece-based algorithm. It manages maze tiles, collectibles, teleports, and provides collision detection and pathfinding utilities.
+
+## Constructor
+
+```javascript
+const maze = new MyMaze(cubeSize)
+```
+
+<ParamField path="cubeSize" type="number">
+  The size of each maze tile in world units (typically `MyConstant.BOX_SIZE`)
+</ParamField>
+
+## Properties
+
+<ParamField path="dotNumber" type="number">
+  Total count of collectible dots and pills remaining in the maze
+</ParamField>
+
+<ParamField path="shaderMaterial" type="THREE.ShaderMaterial">
+  Procedurally generated shader material for maze walls with random colors and patterns
+</ParamField>
+
+<ParamField path="mazeData" type="Array<Array<number>>">
+  2D array representing the maze structure:
+  - `0` = Wall
+  - `1` = Empty space
+  - `2` = Dot
+  - `3` = Power pill
+  - `4` = Teleport
+</ParamField>
+
+<ParamField path="teleportPositions" type="Array<THREE.Vector2>">
+  Array of positions for teleport tiles (always come in pairs)
+</ParamField>
+
+<ParamField path="validPositions" type="Array<THREE.Vector2>">
+  Array of all walkable positions (used for random ghost targeting)
+</ParamField>
+
+## Methods
+
+### tetrisGenerator()
+
+Generates a 10x5 Tetris-style pattern using procedural piece placement.
+
+```javascript
+const tetris = maze.tetrisGenerator()
+```
+
+**Returns:** `Array<Array<[number, number]>>` - 10x5 grid where each cell contains `[up, right]` indicating walls
+
+**Details:**
+- Uses Tetris-like pieces from `MyPiece` definitions
+- Ensures ghost spawn area remains clear (rows 3-4, columns 0-1)
+- Randomly selects valid pieces that fit available space
+- Returns pattern suitable for 3x3 expansion
+
+### tetris3x3Generator()
+
+Expands the Tetris pattern from 10x5 to 28x15 by scaling each cell to 3x3.
+
+```javascript
+const tetris3x3 = maze.tetris3x3Generator()
+```
+
+**Returns:** `Array<Array<number>>` - 28x15 grid of 0s and 1s (walls and spaces)
+
+**Details:**
+- Calls `tetrisGenerator()` and expands each cell
+- Clears the ghost spawn box area
+- Adjusts dimensions to exactly 28x15 for symmetry
+
+### mazeGenerator()
+
+Generates the complete 31x28 maze with symmetry, teleports, and collectibles.
+
+```javascript
+const mazeData = maze.mazeGenerator()
+```
+
+**Returns:** `Array<Array<number>>` - Complete 31x28 maze data array
+
+**Details:**
+- Generates half maze using `tetris3x3Generator()`
+- Mirrors horizontally for symmetry
+- Adds border walls
+- Places teleport portals on edges
+- Fills walkable spaces with dots (value 2)
+- Adds 4 power pills at strategic corners
+- Keeps center area clear for ghost spawn
+
+### pieceGenerator(row, col, map)
+
+Selects a valid Tetris piece for a specific position in the pattern.
+
+```javascript
+const piece = maze.pieceGenerator(2, 1, mapData)
+```
+
+<ParamField path="row" type="number">
+  Current row in the 10x5 Tetris grid
+</ParamField>
+
+<ParamField path="col" type="number">
+  Current column in the 10x5 Tetris grid
+</ParamField>
+
+<ParamField path="map" type="Array<Array<boolean>>">
+  Availability map tracking which cells are already occupied
+</ParamField>
+
+**Returns:** `Array<[number, number, [number, number]]>` - Selected piece with relative positions
+
+### getRandomValidPosition()
+
+Returns a random walkable position from the maze.
+
+```javascript
+const randomPos = maze.getRandomValidPosition()
+```
+
+**Returns:** `THREE.Vector2` - Random valid position in maze coordinates
+
+**Usage:** Used by ghosts for random wandering in scared mode
+
+### getDotNumber()
+
+Returns the current count of remaining collectibles.
+
+```javascript
+const remaining = maze.getDotNumber()
+```
+
+**Returns:** `number` - Total dots and pills remaining
+
+**Usage:** Used to detect level completion (when returns 0)
+
+### clearColor(material)
+
+Resets all tiles with a specific material back to invisible.
+
+```javascript
+maze.clearColor(ghostMaterial)
+```
+
+<ParamField path="material" type="THREE.Material">
+  The material to clear from maze tiles
+</ParamField>
+
+**Usage:** Clears ghost pathfinding visualization when `MyConstant.SHOW_PATH` is enabled
+
+### getOtherTeleport(pos, dir)
+
+Finds the exit teleport position when entering a teleport tile.
+
+```javascript
+const exitPos = maze.getOtherTeleport(new THREE.Vector2(14, 0), new THREE.Vector2(1, 0))
+```
+
+<ParamField path="pos" type="THREE.Vector2">
+  Current character position in maze coordinates
+</ParamField>
+
+<ParamField path="dir" type="THREE.Vector2">
+  Movement direction vector
+</ParamField>
+
+**Returns:** `THREE.Vector2` - Position of the paired teleport exit
+
+### collisionType(pos, dir)
+
+Returns the tile type in the direction of movement.
+
+```javascript
+const tileType = maze.collisionType(new THREE.Vector2(10, 10), new THREE.Vector2(1, 0))
+```
+
+<ParamField path="pos" type="THREE.Vector2">
+  Current position in maze coordinates
+</ParamField>
+
+<ParamField path="dir" type="THREE.Vector2">
+  Direction vector to check
+</ParamField>
+
+**Returns:** `number` - Tile type (0-4) in the specified direction
+
+### getTileType(pos)
+
+Returns the type of tile at a specific position.
+
+```javascript
+const type = maze.getTileType(new THREE.Vector2(5, 10))
+```
+
+<ParamField path="pos" type="THREE.Vector2">
+  Position in maze coordinates to check
+</ParamField>
+
+**Returns:** `number` - Tile type: 0=wall, 1=empty, 2=dot, 3=pill, 4=teleport
+
+### getNeighbors(pos)
+
+Returns walkability information for all four cardinal directions.
+
+```javascript
+const neighbors = maze.getNeighbors(new THREE.Vector2(10, 10))
+```
+
+<ParamField path="pos" type="THREE.Vector2">
+  Position in maze coordinates
+</ParamField>
+
+**Returns:** `Array<number>` - Four values `[right, left, down, up]` where:
+- `1` or `-1` = walkable in that direction
+- `0` = wall (blocked)
+
+**Usage:** Used by Pacman to determine valid movement directions
+
+### removeDot(pos)
+
+Removes a collectible from the maze and decrements the dot counter.
+
+```javascript
+maze.removeDot(new THREE.Vector2(15, 10))
+```
+
+<ParamField path="pos" type="THREE.Vector2">
+  Position of the dot/pill to remove
+</ParamField>
+
+**Details:**
+- Removes the dot/pill visual from the tile
+- Changes tile type to empty (1)
+- Decrements `dotNumber`
+
+### checkCollision(hitbox, pos, dir)
+
+Checks if a character's hitbox would collide with walls in the movement direction.
+
+```javascript
+const willCollide = maze.checkCollision(characterHitbox, position, direction)
+```
+
+<ParamField path="hitbox" type="THREE.Box3">
+  Character's collision box
+</ParamField>
+
+<ParamField path="pos" type="THREE.Vector2">
+  Current position in maze coordinates
+</ParamField>
+
+<ParamField path="dir" type="THREE.Vector2">
+  Intended movement direction
+</ParamField>
+
+**Returns:** `boolean` - `true` if collision detected, `false` if path is clear
+
+**Details:**
+- Checks 3 tiles in movement direction (handles width of characters)
+- Only checks tiles with `has_hitbox` property
+- Uses Three.js Box3 intersection tests
+
+### createShaderMaterial()
+
+Generates a unique procedural shader material for maze walls.
+
+```javascript
+const material = maze.createShaderMaterial()
+```
+
+**Returns:** `THREE.ShaderMaterial` - Custom shader with random colors and noise patterns
+
+**Details:**
+- Randomizes hue for base color
+- Generates random noise parameters
+- Creates border effect with configurable width and blur
+- Uses vertex and fragment shaders from DOM
+
+### update()
+
+Updates animated maze elements each frame.
+
+```javascript
+maze.update()
+```
+
+**Details:**
+- Updates teleport portal animations
+- Called every frame from scene update loop
+
+### dispose()
+
+Cleans up all maze tile resources and geometries.
+
+```javascript
+maze.dispose()
+```
+
+**Details:**
+- Calls `dispose()` on all child tiles
+- Releases geometry and material memory
+- Should be called before creating a new maze
+
+## Example Usage
+
+```javascript
+// Create a new procedural maze
+const maze = new MyMaze(MyConstant.BOX_SIZE)
+scene.add(maze)
+
+// Check a tile type
+const tileType = maze.getTileType(new THREE.Vector2(10, 15))
+if (tileType === 2) {
+  console.log("This is a dot!")
+  maze.removeDot(new THREE.Vector2(10, 15))
+}
+
+// Check for collision
+const position = new THREE.Vector2(10, 10)
+const direction = new THREE.Vector2(1, 0)
+if (maze.checkCollision(character.hitbox, position, direction)) {
+  console.log("Can't move - wall ahead!")
+}
+
+// Update in game loop
+function animate() {
+  maze.update()
+  renderer.render(scene, camera)
+  requestAnimationFrame(animate)
+}
+
+// Clean up when generating new level
+maze.dispose()
+scene.remove(maze)
+const newMaze = new MyMaze(MyConstant.BOX_SIZE)
+scene.add(newMaze)
+```
+
+## Maze Generation Algorithm
+
+The maze generation uses a unique three-stage process:
+
+1. **Tetris Stage (10x5):** Places Tetris-like pieces randomly while respecting constraints
+2. **3x3 Expansion (28x15):** Expands each 1x1 cell to a 3x3 block for proper scale
+3. **Mirroring & Finishing (31x28):** Mirrors horizontally, adds borders, teleports, and collectibles
+
+This ensures:
+- Every maze is unique and playable
+- Symmetric layout (classic Pac-Man style)
+- Proper pathfinding graph for ghost AI
+- Guaranteed solvability
+
+## Tile Types Reference
+
+| Value | Type | Description |
+|-------|------|-------------|
+| 0 | Wall | Solid obstacle with collision |
+| 1 | Empty | Walkable space (no collectible) |
+| 2 | Dot | Small collectible (10 points) |
+| 3 | Pill | Power pill (50 points, scares ghosts) |
+| 4 | Teleport | Portal to opposite side of maze |
+
+## Related Classes
+
+- [MyGame](/api/mygame) - Game logic and character management
+- [MyScene](/api/myscene) - Main scene management
+- MyTile - Individual maze tile class
+- MyPiece - Tetris piece definitions

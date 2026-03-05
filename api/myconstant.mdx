@@ -1,0 +1,116 @@
+---
+title: 'MyConstant'
+description: 'Game configuration constants that define core gameplay parameters'
+---
+
+## Overview
+
+The `MyConstant` class contains static constants that define fundamental game parameters such as maze dimensions, character sizes, and debug visualization flags. These constants are used throughout the game to ensure consistent sizing and behavior.
+
+## Constants
+
+### Maze Dimensions
+
+<ParamField path="MAZE_WIDTH" type="number" default="30">
+  The width of the maze grid in tiles. Defines how many columns the maze contains.
+</ParamField>
+
+<ParamField path="MAZE_HEIGHT" type="number" default="30">
+  The height of the maze grid in tiles. Defines how many rows the maze contains.
+</ParamField>
+
+### Size Parameters
+
+<ParamField path="BOX_SIZE" type="number" default="2">
+  The size of each maze tile in 3D units. This is the base unit for all spatial calculations in the game.
+</ParamField>
+
+<ParamField path="CHARACTER_SIZE" type="number" default="(BOX_SIZE/2) * 0.9">
+  The size of game characters (Pac-Man and ghosts). Calculated as 90% of half a box size to ensure characters fit within tiles with some padding.
+</ParamField>
+
+### Debug Flags
+
+<ParamField path="SHOW_HITBOX" type="boolean" default="false">
+  When enabled, displays visual hitboxes around characters for debugging collision detection.
+</ParamField>
+
+<ParamField path="SHOW_MAZE_HITBOX" type="boolean" default="true">
+  When enabled, displays hitbox visualization for maze walls and obstacles.
+</ParamField>
+
+<ParamField path="SHOW_PATH" type="boolean" default="false">
+  When enabled, visualizes the pathfinding routes used by ghost AI to chase Pac-Man.
+</ParamField>
+
+<ParamField path="ACTIVE_SHADER" type="boolean" default="true">
+  Enables or disables shader effects in the game.
+</ParamField>
+
+## Usage Examples
+
+### Creating the Maze
+
+```javascript
+// Initialize maze with configured box size
+this.maze = new MyMaze(MyConstant.BOX_SIZE);
+```
+
+### Positioning Characters
+
+```javascript
+// Create Pac-Man with character size from constants
+var pacman = new MyPacman(
+  this.charactersSpawnPosition[0], 
+  MyConstant.CHARACTER_SIZE, 
+  pacmanDir
+);
+
+// Position model based on grid coordinates
+this.model.position.set(
+  pos.x * MyConstant.BOX_SIZE, 
+  pos.y * MyConstant.BOX_SIZE, 
+  pos.z * MyConstant.BOX_SIZE
+);
+```
+
+### Converting Between Grid and World Coordinates
+
+```javascript
+// Convert world position to grid coordinates
+let pos = new THREE.Vector2(
+  this.characters[0].getPosition().x / MyConstant.BOX_SIZE, 
+  this.characters[0].getPosition().z / MyConstant.BOX_SIZE
+);
+```
+
+### Camera Positioning
+
+```javascript
+// Position top-down camera centered on maze
+this.topCam.position.set(
+  MyConstant.MAZE_WIDTH/2 * MyConstant.BOX_SIZE, 
+  78, 
+  MyConstant.MAZE_HEIGHT/2 * MyConstant.BOX_SIZE
+);
+```
+
+### Debug Visualization
+
+```javascript
+// Conditionally show pathfinding visualization
+if(MyConstant.SHOW_PATH){
+  // Draw ghost path to Pac-Man
+  this.maze.showPath(path);
+}
+```
+
+## Source Location
+
+**File**: `~/workspace/source/pacman/src/MyConstant.js:1`
+
+## Related Classes
+
+- [MyMaze](/api/mymaze) - Uses constants for maze generation
+- [MyCharacter](/api/mycharacter) - Uses size and hitbox constants
+- [MyGame](/api/mygame) - Uses all constants for game initialization

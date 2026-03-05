@@ -1,0 +1,496 @@
+---
+title: 'Controls System'
+description: 'Input handling, camera switching, and movement controls'
+---
+
+## Overview
+
+The controls system handles keyboard input for camera switching and Pac-Man movement. Input is processed through event listeners and delegated to the appropriate handlers.
+
+## Input Flow
+
+```
+Keyboard Event → MyScene.onKeyDown() → MyControls.manager() → Character Action
+```
+
+---
+
+## MyControls Class
+
+The `MyControls` class defines key mappings and processes input:
+
+```javascript
+class MyControls {
+  constructor() {
+    this.rotateLeftKey = 81;    // Q - Unused in final version
+    this.rotateRightKey = 69;   // E - Unused in final version
+    
+    this.moveLeftKey = 37;      // Left Arrow
+    this.moveUpKey = 38;        // Up Arrow
+    this.moveRightKey = 39;     // Right Arrow
+    this.moveDownKey = 40;      // Down Arrow
+    
+    this.dieKey = 32;           // Spacebar - Debug respawn
+    this.memoryKey = 13;        // Enter - Debug memory info
+  }
+}
+```
+
+### Key Code Reference
+
+| Key | Code | Action |
+|-----|------|--------|
+| Left Arrow | 37 | Move Pac-Man left |
+| Up Arrow | 38 | Move Pac-Man up |
+| Right Arrow | 39 | Move Pac-Man right |
+| Down Arrow | 40 | Move Pac-Man down |
+| `1` | 49 | Switch to free camera |
+| `2` | 50 | Switch to top-down camera |
+| `3` | 51 | Switch to side camera |
+| Spacebar | 32 | Respawn (debug) |
+| Enter | 13 | Show memory info (debug) |
+
+---
+
+## Event Handling in MyScene
+
+### Keyboard Input
+
+The scene processes keyboard events and routes them appropriately:
+
+```javascript
+onKeyDown(event) {
+  var key = event.which || event.keyCode;
+  
+  // Camera switching (handled by scene)
+  if (key == 49) {  // Key '1'
+    this.changeCamera(1);
+  }
+  else if (key == 50) {  // Key '2'
+    this.changeCamera(2);
+  }
+  else if (key == 51) {  // Key '3'
+    this.changeCamera(3);
+  }
+  
+  // All other keys go to controls manager
+  else {
+    this.controls.manager(key, this.game, this.renderer);
+  }
+}
+```
+
+<Info>
+  Camera switching is handled directly by the scene, while movement controls are delegated to the `MyControls` class.
+</Info>
+
+### Mouse Movement
+
+Mouse movement is used for menu interaction via raycasting:
+
+```javascript
+onMouseMove(event) {
+  var mouse = new THREE.Vector2();
+  // Convert to normalized device coordinates (-1 to +1)
+  mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = 1 - 2 * (event.clientY / window.innerHeight);
+  
+  // Create raycaster from camera through mouse position
+  var raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(mouse, this.getCamera());
+  
+  // Check for intersections with pickable objects
+  var pickedObjects = raycaster.intersectObjects(
+    this.pickableObjects,
+    true  // Check children
+  );
+  
+  // Highlight hovered objects
+  if(pickedObjects.length > 0) {
+    if(!pickedObjects[0].object.userData.userData.selected)
+      pickedObjects[0].object.userData.userData.select();
+  }
+  else {
+    // Deselect all objects
+    for(var i = 0; i < this.pickableObjects.length; i++) {
+      if(this.pickableObjects[i].selected)
+        this.pickableObjects[i].deselect();
+    }
+  }
+}
+```
+
+### Mouse Click
+
+Mouse clicks start the game from the menu:
+
+```javascript
+onMouseClick(event) {
+  var mouse = new THREE.Vector2();
+  mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = 1 - 2 * (event.clientY / window.innerHeight);
+  
+  var raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(mouse, this.getCamera());
+  var pickedObjects = raycaster.intersectObjects(
+    this.pickableObjects,
+    true
+  );
+  
+  if(pickedObjects.length > 0) {
+    this.remove(this.menu);
+    this.game.startGame();
+    this.add(this.game);
+    this.status = "PACMAN";
+    this.changeCamera(2);  // Switch to top-down view
+  }
+}
+```
+
+<Tip>
+  Raycasting converts 2D mouse coordinates into a 3D ray to detect which objects the cursor is pointing at.
+</Tip>
+
+---
+
+## Movement Control Manager
+
+### Processing Arrow Keys
+
+```javascript
+manager(keyCode, game, renderer) {
+  var dir = new THREE.Vector2(0,0);
+  
+  // Convert key code to direction vector
+  if (keyCode == this.moveLeftKey) {
+    dir.x = -1;  // Move left
+  }
+  if (keyCode == this.moveRightKey) {
+    dir.x = 1;   // Move right
+  }
+  if (keyCode == this.moveDownKey) {
+    dir.y = 1;   // Move down (positive Z)
+  }
+  if (keyCode == this.moveUpKey) {
+    dir.y = -1;  // Move up (negative Z)
+  }
+  
+  // Debug commands
+  if (keyCode == this.dieKey) {
+    game.respawn();  // Spacebar respawns Pac-Man
+  }
+  
+  if (keyCode == this.memoryKey) {
+    console.log(renderer.info);  // Enter shows WebGL memory stats
+  }
+  
+  // Send direction to Pac-Man's buffer
+  if (dir.x != 0 || dir.y != 0) {
+    game.characters[0].rotateBuffer(dir);
+  }
+}
+```
+
+<Info>
+  Movement commands are buffered rather than executed immediately, allowing responsive controls even when approaching intersections.
+</Info>
+
+---
+
+## Direction Buffering System
+
+Pac-Man uses a sophisticated buffering system for smooth controls:
+
+### Buffer Storage
+
+```javascript
+// In MyPacman constructor
+this.dirBuffer = new THREE.Vector2(0,0);      // Queued direction
+this.validRotationX = new THREE.Vector2(0,0); // Valid X moves
+this.validRotationY = new THREE.Vector2(0,0); // Valid Y moves
+```
+
+### Storing Input
+
+```javascript
+rotateBuffer(dir) {
+  this.dirBuffer = dir;  // Store the desired direction
+}
+```
+
+### Processing Buffered Input
+
+Every frame, Pac-Man checks if the buffered direction is valid:
+
+```javascript
+checkRotation() {
+  // Only process if buffer differs from current direction
+  if(this.dirBuffer.x != this.dirX || this.dirBuffer.y != this.dirZ) {
+    // Ensure buffer contains only one axis
+    if((this.dirBuffer.x != 0 && this.dirBuffer.y == 0) ||
+       (this.dirBuffer.x == 0 && this.dirBuffer.y != 0)) {
+      
+      var validRotation = false;
+      
+      // Check if X-axis movement is valid
+      if(this.dirBuffer.x != 0) {
+        if(this.dirBuffer.x == this.validRotationX.x || 
+           this.dirBuffer.x == this.validRotationX.y)
+          validRotation = true;
+      }
+      // Check if Y-axis movement is valid
+      else if (this.dirBuffer.y != 0) {
+        if(this.dirBuffer.y == this.validRotationY.x || 
+           this.dirBuffer.y == this.validRotationY.y)
+          validRotation = true;
+      }
+      
+      if(validRotation) {
+        // Don't adjust position when reversing direction
+        if(!(this.dirX == -this.dirBuffer.x || 
+             this.dirZ == -this.dirBuffer.y)) {
+          this.adjustPosition();  // Snap to grid
+        }
+        
+        this.rotate(this.dirBuffer);  // Execute turn
+        this.dirBuffer = new THREE.Vector2(0,0);  // Clear buffer
+        this.validRotationX = new THREE.Vector2(0,0);
+        this.validRotationY = new THREE.Vector2(0,0);
+      }
+    }
+  }
+}
+```
+
+### Valid Neighbor Detection
+
+The game continuously updates which directions Pac-Man can turn:
+
+```javascript
+setNeightbors(neighbors) {
+  // neighbors = [right, left, down, up]
+  this.validRotationX = new THREE.Vector2(neighbors[0], neighbors[1]);
+  this.validRotationY = new THREE.Vector2(neighbors[2], neighbors[3]);
+}
+```
+
+This is called from the game update loop:
+
+```javascript
+// In MyGame.update()
+let pos = new THREE.Vector2(
+  Math.round(pacman.getPosition().x / MyConstant.BOX_SIZE),
+  Math.round(pacman.getPosition().z / MyConstant.BOX_SIZE)
+);
+let neighbors = this.maze.getNeighbors(pos);
+pacman.setNeightbors(neighbors);
+```
+
+<Tip>
+  The buffering system allows you to press a direction key slightly before reaching an intersection, and Pac-Man will turn as soon as it's valid.
+</Tip>
+
+---
+
+## Camera System
+
+Three camera views are available:
+
+### Camera Types
+
+#### 1. Free Camera (Key: 1)
+
+```javascript
+this.freeCam = new THREE.PerspectiveCamera(
+  45,                              // Field of view
+  window.innerWidth / window.innerHeight,
+  0.1,                            // Near plane
+  1000                            // Far plane
+);
+this.freeCam.position.set(6, 10.5, 35);
+var lookFree = new THREE.Vector3(6, 11, 0);
+this.freeCam.lookAt(lookFree);
+
+// Trackball controls for free movement
+this.cameraControl = new THREE.TrackballControls(
+  this.freeCam,
+  this.renderer.domElement
+);
+this.cameraControl.rotateSpeed = 5;
+this.cameraControl.zoomSpeed = -2;
+this.cameraControl.panSpeed = 0.5;
+this.cameraControl.target = lookFree;
+```
+
+<Info>
+  The free camera supports mouse drag to orbit, scroll to zoom, and right-click drag to pan.
+</Info>
+
+#### 2. Top-Down Camera (Key: 2)
+
+```javascript
+this.topCam = new THREE.PerspectiveCamera(
+  45,
+  window.innerWidth / window.innerHeight,
+  0.1,
+  1000
+);
+
+// Position directly above the center of the maze
+this.topCam.position.set(
+  MyConstant.MAZE_WIDTH/2 * MyConstant.BOX_SIZE,  // Center X
+  78,                                              // Height
+  MyConstant.MAZE_HEIGHT/2 * MyConstant.BOX_SIZE  // Center Z
+);
+
+var lookFront = new THREE.Vector3(
+  MyConstant.MAZE_WIDTH/2 * MyConstant.BOX_SIZE,
+  0,  // Look at ground level
+  MyConstant.MAZE_HEIGHT/2 * MyConstant.BOX_SIZE
+);
+this.topCam.lookAt(lookFront);
+```
+
+#### 3. Side Camera (Key: 3)
+
+```javascript
+this.sideCam = new THREE.PerspectiveCamera(
+  45,
+  window.innerWidth / window.innerHeight,
+  0.1,
+  1000
+);
+this.sideCam.position.set(30, 2, 2);  // Side view position
+var lookSide = new THREE.Vector3(0, 2, 2);
+this.sideCam.lookAt(lookSide);
+```
+
+### Camera Switching
+
+```javascript
+changeCamera(cam) {
+  this.camera = cam;  // 1, 2, or 3
+  this.setCameraAspect(window.innerWidth / window.innerHeight);
+}
+
+getCamera() {
+  var cam;
+  switch (this.camera) {
+    case 1:
+      cam = this.freeCam;
+      break;
+    case 2:
+      cam = this.topCam;
+      break;
+    case 3:
+      cam = this.sideCam;
+      break;
+  }
+  return cam;
+}
+```
+
+<Tip>
+  The top-down camera (key 2) is the default gameplay view and provides the best perspective for navigating the maze.
+</Tip>
+
+---
+
+## Event Listener Setup
+
+All event listeners are registered in the main entry point:
+
+```javascript
+$(function () {
+  // Create scene
+  var scene = new MyScene("#WebGL-output");
+  
+  // Register event listeners
+  window.addEventListener("resize", () => scene.onWindowResize());
+  window.addEventListener("keydown", (event) => scene.onKeyDown(event));
+  window.addEventListener("mousemove", (event) => scene.onMouseMove(event));
+  window.addEventListener("click", (event) => scene.onMouseClick(event));
+  
+  // Start render loop
+  scene.update();
+});
+```
+
+### Window Resize Handler
+
+```javascript
+onWindowResize() {
+  // Update camera aspect ratio
+  this.setCameraAspect(window.innerWidth / window.innerHeight);
+  
+  // Update renderer size
+  this.renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+setCameraAspect(ratio) {
+  this.getCamera().aspect = ratio;
+  this.getCamera().updateProjectionMatrix();  // Apply changes
+}
+```
+
+<Info>
+  The resize handler ensures the game scales correctly when the browser window is resized.
+</Info>
+
+---
+
+## Control Flow Diagram
+
+```
+User Input
+    |
+    v
+[Keyboard Event]
+    |
+    v
+[MyScene.onKeyDown]
+    |
+    +-- Keys 1,2,3 --> [changeCamera]
+    |
+    +-- Other Keys --> [MyControls.manager]
+                           |
+                           +-- Arrow Keys --> [game.characters[0].rotateBuffer]
+                           |                      |
+                           |                      v
+                           |                  [dirBuffer stored]
+                           |                      |
+                           |                      v
+                           |                  [checkRotation (every frame)]
+                           |                      |
+                           |                      v
+                           |                  [rotate + move]
+                           |
+                           +-- Spacebar --> [game.respawn]
+                           |
+                           +-- Enter --> [console.log(renderer.info)]
+```
+
+---
+
+## Best Practices
+
+### Responsive Controls
+
+1. **Buffer Input Early** - Press arrow keys before reaching intersections
+2. **Quick Reversals** - Pressing the opposite direction reverses immediately
+3. **Camera Switching** - Use top-down view (2) for gameplay, free camera (1) for exploration
+
+### Debug Commands
+
+```javascript
+// Spacebar - Respawn Pac-Man at starting position
+game.respawn();
+
+// Enter - View WebGL memory statistics
+console.log(renderer.info);
+// Output: { memory: {...}, render: {...}, programs: [...] }
+```
+
+<Tip>
+  Use the free camera (key 1) with mouse controls to explore the procedurally generated maze from any angle.
+</Tip>

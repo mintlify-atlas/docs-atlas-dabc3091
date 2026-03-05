@@ -1,80 +1,131 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: 'Quickstart'
+description: 'Get the Procedural Pac-Man 3D game running locally in minutes'
 ---
 
-## Get started in three steps
+## Play Online
 
-Get your documentation site running locally and make your first customization.
+The fastest way to try Procedural Pac-Man 3D is through the live demo:
 
-### Step 1: Set up your local environment
+<Card
+  title="Play Now"
+  icon="gamepad"
+  href="https://gsandoval96.github.io/TFG-UGR/pacman/src/"
+>
+  Try the game instantly in your browser
+</Card>
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+## Run Locally
+
+Follow these steps to run the game on your local machine.
+
+<Steps>
+  <Step title="Clone the Repository">
+    Clone the project repository to your local machine:
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
+    ```bash
+    git clone https://github.com/gsandoval96/TFG-UGR.git
+    cd TFG-UGR
+    ```
+  </Step>
+
+  <Step title="Navigate to the Game Directory">
+    Navigate to the pacman directory where the game files are located:
     
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+    ```bash
+    cd pacman
+    ```
+  </Step>
 
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
+  <Step title="Start the HTTP Server">
+    Start a local HTTP server using Python. This is required because the game loads resources using JavaScript modules:
     
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    ```bash
+    python -m http.server
+    ```
+    
+    <Tip>
+      If you have Python 2.x, use `python -m SimpleHTTPServer` instead.
+    </Tip>
+    
+    The server will start on port 8000 by default.
+  </Step>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+  <Step title="Open in Browser">
+    Open your web browser and navigate to:
+    
+    ```
+    http://localhost:8000/src/
+    ```
+    
+    The game should load and you can start playing immediately!
+  </Step>
+</Steps>
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+## System Requirements
 
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+- **Python**: Version 2.7+ or 3.x (for running the local HTTP server)
+- **Web Browser**: Modern browser with WebGL support
+  - Chrome (recommended)
+  - Firefox
+  - Safari
+  - Edge
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  The game uses Three.js for 3D rendering, which requires WebGL support in your browser. Most modern browsers support this by default.
 </Note>
+
+## Browser Compatibility
+
+The game requires:
+- WebGL-enabled browser
+- JavaScript enabled
+- Support for ES6 features
+
+## What You'll See
+
+Once the game loads, you'll see:
+- A 3D procedurally generated maze
+- Pac-Man character ready to move
+- Ghost enemies with AI pathfinding
+- Score display and game controls
+- FPS counter for performance monitoring
+
+## Controls
+
+<Info>
+  Use the arrow keys or WASD to move Pac-Man through the maze. The camera follows the player automatically.
+</Info>
+
+## What's Next
+
+<CardGroup cols={2}>
+  <Card
+    title="Architecture Overview"
+    icon="sitemap"
+    href="/architecture/overview"
+  >
+    Learn about the game's architecture and key components
+  </Card>
+  <Card
+    title="Procedural Generation"
+    icon="wand-magic-sparkles"
+    href="/pcg/overview"
+  >
+    Discover how mazes are procedurally generated
+  </Card>
+  <Card
+    title="Scene Structure"
+    icon="cube"
+    href="/architecture/scene-structure"
+  >
+    Understand the 3D scene and camera system
+  </Card>
+  <Card
+    title="AI & Pathfinding"
+    icon="brain"
+    href="/pcg/ai-behavior"
+  >
+    Explore ghost AI and A* pathfinding
+  </Card>
+</CardGroup>

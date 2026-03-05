@@ -1,0 +1,411 @@
+---
+title: 'Texture Generation with Voronoi Shaders'
+description: 'GLSL shader implementation for procedural wall textures using Voronoi tessellation'
+---
+
+# Texture Generation with Voronoi Shaders
+
+The maze walls in Procedural Pac-Man 3D use **Voronoi tessellation** implemented in GLSL shaders to create unique, procedurally-generated textures. Each maze features randomized parameters that produce distinctive visual patterns.
+
+## Voronoi Tessellation Overview
+
+Voronoi diagrams partition space into regions based on distance to a set of random seed points. This creates organic, cell-like patterns perfect for texture generation.
+
+<Note>
+Voronoi patterns are commonly found in nature: giraffe spots, cracked mud, cellular structures, and honeycomb patterns all exhibit Voronoi-like characteristics.
+</Note>
+
+## Shader Architecture
+
+The texture generation system consists of two GLSL shaders:
+
+1. **Vertex Shader** - Passes UV coordinates to fragment shader
+2. **Fragment Shader** - Computes Voronoi pattern and colors
+
+### Vertex Shader
+
+The vertex shader is straightforward, passing texture coordinates to the fragment shader:
+
+```glsl
+varying vec2 vUv;
+
+void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+```
+
+### Fragment Shader
+
+The fragment shader implements the Voronoi algorithm with customizable parameters:
+
+```glsl
+varying vec2 vUv;
+uniform vec3 color;          // Base wall color
+uniform vec3 borderColor;    // Cell border color
+uniform float borderWidth;   // Border thickness
+uniform float blur;          // Edge softness
+uniform float amount;        // Cell density (0.25-0.5)
+uniform vec2 vecA;           // Hash function parameter A
+uniform vec2 vecB;           // Hash function parameter B
+
+// Procedural hash function for generating random points
+vec2 hash2(vec2 p) {
+    p = vec2(dot(p, vecA), dot(p, vecB));
+    return fract(sin(p) * 43758.5453);
+}
+
+// Voronoi distance field calculation
+vec3 voronoi(in vec2 x) {
+    vec2 n = floor(x);
+    vec2 f = fract(x);
+    
+    // Find closest seed point
+    vec2 mg, mr;
+    float md = 8.0;
+    
+    for (int j = -1; j <= 1; j++)
+    for (int i = -1; i <= 1; i++) {
+        vec2 g = vec2(float(i), float(j));
+        vec2 o = hash2(n + g);  // Random offset
+        vec2 r = g + o - f;
+        float d = dot(r, r);
+        
+        if (d < md) {
+            md = d;
+            mr = r;
+            mg = g;
+        }
+    }
+    
+    // Calculate distance to nearest cell border
+    md = 8.0;
+    for (int j = -2; j <= 2; j++)
+    for (int i = -2; i <= 2; i++) {
+        vec2 g = mg + vec2(float(i), float(j));
+        vec2 o = hash2(n + g);
+        vec2 r = g + o - f;
+        
+        if (dot(mr - r, mr - r) > 0.00001)
+            md = min(md, dot(0.5 * (mr + r), normalize(r - mr)));
+    }
+    
+    return vec3(md, mr);
+}
+
+void main() {
+    // Calculate Voronoi pattern
+    vec3 c = voronoi(8.0 * (vUv * vec2(amount)));
+    
+    // Mix border and fill colors based on distance
+    vec3 col = mix(
+        borderColor, 
+        color, 
+        smoothstep(borderWidth/100.0, (borderWidth/100.0) + (blur/100.0), c.x)
+    );
+    
+    gl_FragColor = vec4(col, 1.0);
+}
+```
+
+## Shader Parameter Randomization
+
+When creating maze walls, the `createShaderMaterial()` method randomizes shader parameters to ensure unique textures:
+
+```javascript
+createShaderMaterial() {
+    var color = new THREE.Color(0xBB6649);  // Base brick color
+    var hsl = new THREE.Object3D();
+    color.getHSL(hsl);
+    
+    // Randomize hue while keeping saturation and lightness
+    var hue = (Math.random());
+    color.setHSL(hue, hsl.s, hsl.l);
+    
+    // Randomize cell density (0.25 to 0.5)
+    var amount = (Math.random() * (0.5 - 0.25) + 0.25);
+    
+    // Randomize hash function parameters
+    let a1 = (Math.random() * (150.0 - 75.0) + 150.0);
+    let a2 = (Math.random() * (350.0 - 200.0) + 350.0);
+    let b1 = (Math.random() * (150.0 - 75.0) + 150.0);
+    let b2 = (Math.random() * (350.0 - 200.0) + 350.0);
+    var vecA = new THREE.Vector2(a1, a2);
+    var vecB = new THREE.Vector2(b1, b2);
+    
+    var uniforms = {
+        amount: {
+            type: "f",
+            value: amount
+        },
+        color: {
+            type: "c",
+            value: color
+        },
+        borderWidth: {
+            type: "f",
+            value: 4.25
+        },
+        borderColor: {
+            type: "c",
+            value: new THREE.Color(0xc6c6c6)  // Light gray borders
+        },
+        blur: {
+            type: "f",
+            value: 0.0  // Sharp edges
+        },
+        vecA: {
+            type: "f",
+            value: vecA
+        },
+        vecB: {
+            type: "f",
+            value: vecB
+        }
+    };
+    
+    var vertexShader = document.getElementById('vertexShader').text;
+    var fragmentShader = document.getElementById('fragmentShader').text;
+    
+    var shaderMaterial = new THREE.ShaderMaterial({
+        uniforms: uniforms,
+        vertexShader: vertexShader,
+        fragmentShader: fragmentShader
+    });
+    
+    return shaderMaterial;
+}
+```
+
+## Parameter Breakdown
+
+### Color Parameters
+
+<CodeGroup>
+```javascript Base Color
+// Fully randomized hue, constant saturation/lightness
+var hue = Math.random();  // 0.0 to 1.0
+color.setHSL(hue, hsl.s, hsl.l);
+// Results in colors ranging from red to violet
+```
+
+```javascript Border Color
+// Fixed light gray for contrast
+borderColor: new THREE.Color(0xc6c6c6)
+```
+</CodeGroup>
+
+### Geometric Parameters
+
+| Parameter | Range | Purpose |
+|-----------|-------|----------|
+| `amount` | 0.25 - 0.5 | Controls cell density/size |
+| `borderWidth` | 4.25 (fixed) | Thickness of cell borders |
+| `blur` | 0.0 (fixed) | Edge sharpness (0 = sharp) |
+| `vecA` | (75-150, 200-350) | Hash function randomization |
+| `vecB` | (75-150, 200-350) | Hash function randomization |
+
+### Hash Function Vectors
+
+The `vecA` and `vecB` parameters randomize the procedural noise function, ensuring different Voronoi point distributions:
+
+```javascript
+// Different hash vectors = different cell patterns
+let a1 = Math.random() * 75.0 + 75.0;    // 75 to 150
+let a2 = Math.random() * 150.0 + 200.0;  // 200 to 350
+let b1 = Math.random() * 75.0 + 75.0;    // 75 to 150
+let b2 = Math.random() * 150.0 + 200.0;  // 200 to 350
+```
+
+<Warning>
+The hash vectors must be sufficiently large to avoid pattern repetition. Values below 50 can cause visible tiling artifacts.
+</Warning>
+
+## Voronoi Algorithm Details
+
+### Step 1: Generate Seed Points
+
+For each pixel, the shader examines a 3x3 grid of cells and places a random point in each:
+
+```glsl
+vec2 n = floor(x);  // Current cell
+vec2 f = fract(x);  // Position within cell
+
+for (int j = -1; j <= 1; j++)
+for (int i = -1; i <= 1; i++) {
+    vec2 g = vec2(float(i), float(j));
+    vec2 o = hash2(n + g);  // Random point in cell
+    vec2 r = g + o - f;     // Vector to point
+    float d = dot(r, r);    // Distance squared
+    // Track closest point...
+}
+```
+
+### Step 2: Find Cell Borders
+
+Once the closest seed point is known, the shader calculates the distance to the nearest cell border:
+
+```glsl
+// Check 5x5 grid for neighboring cells
+for (int j = -2; j <= 2; j++)
+for (int i = -2; i <= 2; i++) {
+    vec2 g = mg + vec2(float(i), float(j));
+    vec2 o = hash2(n + g);
+    vec2 r = g + o - f;
+    
+    if (dot(mr - r, mr - r) > 0.00001) {
+        // Distance to border = perpendicular distance to bisector
+        md = min(md, dot(0.5 * (mr + r), normalize(r - mr)));
+    }
+}
+```
+
+### Step 3: Color Mixing
+
+The final color is computed using `smoothstep` for anti-aliasing:
+
+```glsl
+vec3 col = mix(
+    borderColor,  // Color when distance < borderWidth
+    color,        // Color when distance > borderWidth + blur
+    smoothstep(borderWidth/100.0, (borderWidth/100.0) + (blur/100.0), c.x)
+);
+```
+
+## Visual Examples
+
+Different parameter combinations produce distinct textures:
+
+<CodeGroup>
+```javascript Large Cells (amount = 0.25)
+// Fewer, larger Voronoi cells
+amount: 0.25
+// Result: Bold, chunky stone-like texture
+```
+
+```javascript Small Cells (amount = 0.5)
+// Many, smaller Voronoi cells  
+amount: 0.5
+// Result: Fine, mosaic-like texture
+```
+
+```javascript Blue Hue (hue = 0.6)
+// Cyan-blue tinted walls
+hue: 0.6
+// Result: Cool-toned, aquatic appearance
+```
+
+```javascript Red Hue (hue = 0.0)
+// Red-orange tinted walls
+hue: 0.0  
+// Result: Warm-toned, brick-like appearance
+```
+</CodeGroup>
+
+## Performance Considerations
+
+The shader is optimized for real-time rendering:
+
+- **Loop Complexity**: Fixed loop bounds (3x3 for points, 5x5 for borders)
+- **Distance Calculations**: Uses squared distances to avoid `sqrt()` when possible
+- **Hash Function**: Simple `sin()` based hash is fast on modern GPUs
+- **Fragment Count**: Applied only to wall tiles, not empty spaces
+
+<Note>
+The shader runs at 60 FPS on most modern hardware. For very low-end devices, consider reducing the Voronoi cell search radius from 5x5 to 3x3.
+</Note>
+
+## Integration with Three.js
+
+The shader material is applied to wall tiles during maze construction:
+
+```javascript
+// From MyMaze.js constructor
+this.shaderMaterial = this.createShaderMaterial();
+
+// Applied to wall tiles
+for (var i = 0; i < MAZE_HEIGHT; i++) {
+    for (var j = 0; j < MAZE_WIDTH; j++) {
+        switch (this.mazeData[i][j]) {
+            case 0:  // Wall
+                cube = new MyTile(
+                    position, 
+                    "wall", 
+                    cubeSize, 
+                    true,  // has hitbox
+                    this.shaderMaterial  // Voronoi shader
+                );
+                break;
+            // Other tile types...
+        }
+    }
+}
+```
+
+## Customization Options
+
+Developers can easily modify the visual style by adjusting parameters:
+
+<Steps>
+  <Step title="Change Color Palette">
+    Modify the base color or restrict hue ranges:
+    ```javascript
+    var hue = Math.random() * 0.3;  // Red to yellow only
+    ```
+  </Step>
+  
+  <Step title="Adjust Cell Size">
+    Change the `amount` range for different scales:
+    ```javascript
+    var amount = Math.random() * 0.3 + 0.1;  // Larger cells
+    ```
+  </Step>
+  
+  <Step title="Add Edge Blur">
+    Set `blur > 0` for softer cell borders:
+    ```javascript
+    blur: { value: 2.0 }  // Slight blur
+    ```
+  </Step>
+  
+  <Step title="Modify Border Thickness">
+    Adjust `borderWidth` for bolder or finer lines:
+    ```javascript
+    borderWidth: { value: 6.0 }  // Thicker borders
+    ```
+  </Step>
+</Steps>
+
+## Mathematical Foundation
+
+The Voronoi diagram is defined mathematically as:
+
+```
+For a set of seed points P = {p₁, p₂, ..., pₙ}
+The Voronoi region for point pᵢ is:
+V(pᵢ) = {x ∈ ℝ² | d(x, pᵢ) ≤ d(x, pⱼ) for all j ≠ i}
+
+Where d(x, p) is the Euclidean distance.
+```
+
+The shader implements this by:
+1. Finding the nearest seed point for each pixel
+2. Computing the distance to the Voronoi edge (where d(x, pᵢ) = d(x, pⱼ))
+3. Coloring based on this distance
+
+## Further Reading
+
+<CardGroup cols={2}>
+  <Card title="Voronoi Diagrams" icon="diagram-project">
+    Learn more about the mathematical properties of Voronoi tessellation
+  </Card>
+  <Card title="GLSL Shaders" icon="code">
+    Explore advanced GLSL shader techniques
+  </Card>
+  <Card title="Procedural Textures" icon="wand-magic-sparkles">
+    Discover other procedural texture generation methods
+  </Card>
+  <Card title="Three.js ShaderMaterial" icon="cube">
+    Official Three.js documentation for custom shaders
+  </Card>
+</CardGroup>

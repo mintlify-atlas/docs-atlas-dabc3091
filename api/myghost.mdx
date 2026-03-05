@@ -1,0 +1,429 @@
+---
+title: 'MyGhost'
+description: 'AI-controlled ghost enemy with multiple behavior states'
+---
+
+## Overview
+
+`MyGhost` extends `MyCharacter` to create enemy ghosts with pathfinding, multiple behavioral states (chase, scared, return home), visual effects, and animations.
+
+**Inheritance**: `THREE.Object3D` → `MyCharacter` → `MyGhost`
+
+## Constructor
+
+<ParamField path="pos" type="THREE.Vector3">
+  Initial position of the ghost in grid coordinates
+</ParamField>
+
+<ParamField path="size" type="number">
+  Base size of the ghost model
+</ParamField>
+
+<ParamField path="dir" type="Object">
+  Initial direction with `x` and `y` properties (values: -1, 0, or 1)
+</ParamField>
+
+<ParamField path="material" type="THREE.Material">
+  Material for the ghost's body color (e.g., red, pink, cyan, orange)
+</ParamField>
+
+```javascript
+const ghost = new MyGhost(
+  new THREE.Vector3(14, 0, 11),
+  1.0,
+  {x: 0, y: 1},
+  MyMaterial.RED
+);
+```
+
+## Properties
+
+### behaviour
+```javascript
+"chase" | "scape" | "return" | "freeze" | "home"
+```
+Current AI behavior state. Default: `"chase"`
+
+- **chase**: Actively pursuing Pac-Man
+- **scape**: Running away (vulnerable state when Pac-Man eats power pellet)
+- **return**: Returning to home position after being eaten
+- **freeze**: Not moving
+- **home**: Waiting in home area
+
+### updatePathTime
+```javascript
+number
+```
+Milliseconds between path recalculations during chase mode. Default: `7500`
+
+### scareTime
+```javascript
+number
+```
+Duration in milliseconds that scared state lasts. Default: `10000`
+
+### speed
+```javascript
+number
+```
+Movement speed (automatically set to 75% of MyCharacter base speed). Modified based on behavior.
+
+### path
+```javascript
+Array<Object> | null
+```
+Current pathfinding route as array of grid positions. Format: `[{x: row, y: col}, ...]`
+
+### sphereGeom
+```javascript
+THREE.SphereGeometry
+```
+Geometry for the ghost's rounded head (hemisphere, 4/5 size).
+
+### eyeGeom
+```javascript
+THREE.SphereGeometry
+```
+Geometry for the white eyeball spheres (6/25 size).
+
+### pupilGeom
+```javascript
+THREE.SphereGeometry
+```
+Geometry for the black pupils (2/25 size).
+
+### cylinderGeom
+```javascript
+THREE.CylinderGeometry
+```
+Geometry for the ghost's cylindrical body (4/5 radius, 4/3 height).
+
+### material
+```javascript
+THREE.Material
+```
+Current material applied to the ghost's body (changes with behavior state).
+
+### cylinder
+```javascript
+THREE.Mesh
+```
+Cylindrical body mesh.
+
+### sphere
+```javascript
+THREE.Mesh
+```
+Hemisphere head mesh.
+
+### rightEye
+```javascript
+THREE.Object3D
+```
+Container for right eyeball and pupil.
+
+### leftEye
+```javascript
+THREE.Object3D
+```
+Container for left eyeball and pupil.
+
+### eyes
+```javascript
+THREE.Object3D
+```
+Container for both eyes, positioned to face forward.
+
+### feetGeom
+```javascript
+THREE.ExtrudeGeometry
+```
+Geometry for the wavy bottom skirt (16 triangular segments).
+
+### feet
+```javascript
+THREE.Object3D
+```
+Container with 16 rotated foot meshes creating the wavy skirt effect.
+
+## Methods
+
+### executePath()
+Follows the current pathfinding route. Moves toward the next waypoint and rotates accordingly. Called automatically by `update()`.
+
+```javascript
+// Set a path and the ghost will follow it
+ghost.path = pathfindingAlgorithm(ghost.position, target.position);
+```
+
+### scare()
+Transitions ghost to scared state: changes to blue color, starts invincibility timer, and clears current path.
+
+```javascript
+// Pac-Man ate a power pellet
+powerPellets.forEach(pellet => {
+  if (pellet.eaten) {
+    ghosts.forEach(ghost => ghost.scare());
+  }
+});
+```
+
+### revive()
+Returns ghost to chase behavior after scared timer expires. Halves movement speed temporarily.
+
+```javascript
+// Called automatically when scare animation completes
+```
+
+### chase()
+Sets ghost to chase behavior: restores original color, clears path, and begins pursuing Pac-Man.
+
+```javascript
+// Return to normal behavior
+ghost.chase();
+```
+
+### returnHome()
+Initiates return to home position after being eaten: makes ghost invisible, doubles speed, and clears path.
+
+```javascript
+// Pac-Man ate the ghost while scared
+if (collision && ghost.behaviour === "scape") {
+  ghost.returnHome();
+  score += 200;
+}
+```
+
+### changeColor(material)
+Updates the ghost's body material (affects cylinder, sphere, and feet).
+
+**Parameters**:
+- `material` (THREE.Material) - New material to apply
+
+```javascript
+// Make ghost blue when scared
+ghost.changeColor(MyMaterial.BLUE);
+
+// Make ghost invisible when returning home
+ghost.changeColor(MyMaterial.INVISIBLE);
+```
+
+### changeBehaviour(status)
+Directly sets the behavior state.
+
+**Parameters**:
+- `status` (string) - New behavior: "chase", "scape", "return", "freeze", or "home"
+
+```javascript
+// Freeze ghost during game pause
+ghost.changeBehaviour("freeze");
+
+// Resume chasing
+ghost.changeBehaviour("chase");
+```
+
+### startUpdatingPaths()
+Begins periodic path recalculation timer. Clears path every `updatePathTime` milliseconds during chase mode.
+
+```javascript
+// Start the ghost AI
+ghost.startUpdatingPaths();
+```
+
+### stopUpdatingPaths()
+Stops the path recalculation timer.
+
+```javascript
+// Pause ghost AI
+ghost.stopUpdatingPaths();
+```
+
+### setUpdatePathTime(time)
+Changes how frequently paths are recalculated.
+
+**Parameters**:
+- `time` (number) - Milliseconds between path updates
+
+```javascript
+// Make ghost more reactive (recalculate every 3 seconds)
+ghost.setUpdatePathTime(3000);
+
+// Make ghost less reactive (recalculate every 15 seconds)
+ghost.setUpdatePathTime(15000);
+```
+
+### setScareTime(time)
+Changes duration of scared state.
+
+**Parameters**:
+- `time` (number) - Milliseconds to stay scared
+
+```javascript
+// Shorter vulnerability period
+ghost.setScareTime(5000);
+```
+
+### startInvencibleAnimation()
+Plays the flashing animation sequence when scared: stays blue for `scareTime` duration, then flashes blue/white 10 times over 5 seconds before returning to chase.
+
+```javascript
+// Called automatically by scare()
+```
+
+### stopInvencibleAnimation()
+Stops the scared animation timers.
+
+```javascript
+// Called automatically by returnHome()
+```
+
+### dispose()
+Cleans up geometries to free memory.
+
+```javascript
+// Before removing ghost from scene
+ghost.dispose();
+scene.remove(ghost);
+```
+
+### update()
+Updates ghost state each frame: executes pathfinding, moves, and updates animations. Does nothing if behavior is "freeze" or "home".
+
+```javascript
+// In game loop
+function animate() {
+  ghost.update();
+  requestAnimationFrame(animate);
+}
+```
+
+## Usage Example
+
+```javascript
+// Create four ghosts with different colors
+const blinky = new MyGhost(
+  new THREE.Vector3(14, 0, 11),
+  1.0,
+  {x: 0, y: 1},
+  MyMaterial.RED
+);
+
+const pinky = new MyGhost(
+  new THREE.Vector3(14, 0, 13),
+  1.0,
+  {x: 0, y: -1},
+  MyMaterial.PINK
+);
+
+const inky = new MyGhost(
+  new THREE.Vector3(12, 0, 13),
+  1.0,
+  {x: 1, y: 0},
+  MyMaterial.CYAN
+);
+
+const clyde = new MyGhost(
+  new THREE.Vector3(16, 0, 13),
+  1.0,
+  {x: -1, y: 0},
+  MyMaterial.ORANGE
+);
+
+const ghosts = [blinky, pinky, inky, clyde];
+ghosts.forEach(ghost => {
+  scene.add(ghost);
+  ghost.startUpdatingPaths();
+});
+
+// Game loop with AI pathfinding
+function gameLoop() {
+  ghosts.forEach(ghost => {
+    // Calculate new path if needed
+    if (ghost.path === null && ghost.behaviour === "chase") {
+      const ghostPos = getGridPosition(ghost);
+      const pacmanPos = getGridPosition(pacman);
+      ghost.path = findPath(maze, ghostPos, pacmanPos);
+    }
+    
+    // Calculate return home path
+    if (ghost.path === null && ghost.behaviour === "return") {
+      const ghostPos = getGridPosition(ghost);
+      const homePos = {x: 14, y: 13};
+      ghost.path = findPath(maze, ghostPos, homePos);
+    }
+    
+    // Calculate escape path (away from Pac-Man)
+    if (ghost.path === null && ghost.behaviour === "scape") {
+      const ghostPos = getGridPosition(ghost);
+      const pacmanPos = getGridPosition(pacman);
+      ghost.path = findEscapePath(maze, ghostPos, pacmanPos);
+    }
+    
+    // Update ghost
+    ghost.update();
+    
+    // Check collision with Pac-Man
+    if (checkCollision(ghost, pacman)) {
+      if (ghost.behaviour === "scape") {
+        // Ghost is vulnerable - send it home
+        ghost.returnHome();
+        score += 200;
+      } else if (ghost.behaviour === "chase") {
+        // Pac-Man dies
+        pacman.die();
+      }
+    }
+  });
+  
+  requestAnimationFrame(gameLoop);
+}
+
+// Handle power pellet collection
+function onPowerPelletEaten() {
+  ghosts.forEach(ghost => {
+    if (ghost.behaviour === "chase") {
+      ghost.scare();
+    }
+  });
+}
+```
+
+## Behavior State Diagram
+
+```
+        [START]
+           ↓
+        [chase] ←――――――――――――┐
+           ↓                  │
+    Power Pellet Eaten       │
+           ↓                  │
+        [scape]         revive()
+           ↓                  │
+    Collision with Pac-Man   │
+           ↓                  │
+        [return]              │
+           ↓                  │
+     Reach home ――――――――――――┘
+```
+
+## Visual Effects
+
+### Hover Animation
+- **Duration**: 1 second per cycle
+- **Range**: ±0.35 units vertical
+- **Type**: Yoyo with infinite repeat
+- **Effect**: Gentle bobbing motion
+
+### Scared Animation Sequence
+1. **Phase 1** (0-10 seconds): Solid blue color
+2. **Phase 2** (10-15 seconds): Flashing blue/white every 0.5 seconds (10 flashes)
+3. **End**: Returns to chase behavior with original color
+
+## Notes
+
+- Ghost speed is 75% of base character speed, making them slightly slower than Pac-Man
+- When returning home after being eaten, speed doubles and ghost becomes invisible
+- Eyes always face forward in the direction of movement
+- The wavy skirt is created using 16 extruded triangular segments
+- Path recalculation frequency affects difficulty: shorter intervals make ghosts more responsive
+- Each ghost typically uses a different pathfinding strategy in actual Pac-Man (not implemented in this base class)

@@ -1,0 +1,73 @@
+---
+title: 'Procedural Generation Overview'
+description: 'Learn about the three types of procedural content generation used in Procedural Pac-Man 3D'
+---
+
+# Procedural Generation Overview
+
+Procedural Pac-Man 3D leverages three distinct types of **Procedural Content Generation (PCG)** to create unique gameplay experiences with every playthrough:
+
+1. **Maze Generation** - Tetris-piece-based algorithm for creating playable mazes
+2. **Texture Generation** - Voronoi tessellation shaders for wall aesthetics
+3. **AI Behavior** - Dynamic pathfinding and adaptive difficulty
+
+## Why Procedural Generation?
+
+The use of PCG in this project serves several key purposes:
+
+<Note>
+**Replayability**: Every level features a unique maze layout, ensuring no two games are identical.
+</Note>
+
+- **Creative Constraints**: The Tetris-piece algorithm generates valid, playable mazes while maintaining the classic Pac-Man gameplay feel
+- **Visual Variety**: Randomized Voronoi shaders create distinctive wall textures for each maze
+- **Dynamic Challenge**: AI behavior adapts based on level progression, with decreasing pathfinding update times and scare durations
+
+## PCG Techniques at a Glance
+
+| Technique | Implementation | Purpose |
+|-----------|---------------|----------|
+| Maze Generation | Tetris-piece algorithm | Creates unique, playable maze layouts |
+| Texture Generation | GLSL Voronoi shaders | Randomizes wall appearance |
+| AI Behavior | A* pathfinding | Provides intelligent ghost movement |
+
+## Architecture Overview
+
+The procedural generation system is implemented in Three.js and consists of:
+
+- **MyMaze.js** - Contains `mazeGenerator()`, `tetris3x3Generator()`, and `tetrisGenerator()` methods
+- **index.html** - Houses GLSL vertex and fragment shaders for Voronoi patterns
+- **MyGhost.js** - Implements A* pathfinding with multiple behavior states
+- **MyGame.js** - Orchestrates AI pathfinding and difficulty scaling
+
+## Learn More
+
+Explore each PCG technique in detail:
+
+<CardGroup cols={3}>
+  <Card title="Maze Generation" icon="grid" href="/pcg/maze-generation">
+    Tetris-piece-based maze construction algorithm
+  </Card>
+  <Card title="Texture Generation" icon="palette" href="/pcg/texture-generation">
+    Voronoi tessellation shader implementation
+  </Card>
+  <Card title="AI Behavior" icon="robot" href="/pcg/ai-behavior">
+    A* pathfinding and dynamic difficulty
+  </Card>
+</CardGroup>
+
+## Key Features
+
+<Steps>
+  <Step title="Maze Structure">
+    Each maze is generated as a 28x30 grid with symmetrical layout, including ghost spawn areas, portal placements, and dot/pill distribution.
+  </Step>
+  
+  <Step title="Visual Randomization">
+    Wall textures use randomized shader parameters (hue, border width, cell amount) to create unique visual identities.
+  </Step>
+  
+  <Step title="Adaptive AI">
+    Ghost behavior becomes more challenging with each level through reduced pathfinding update intervals and shorter scare times.
+  </Step>
+</Steps>

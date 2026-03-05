@@ -1,0 +1,443 @@
+---
+title: 'Character System'
+description: 'Learn about the character hierarchy and implementation in Procedural Pac-Man 3D'
+---
+
+## Overview
+
+The character system uses an inheritance hierarchy with `MyCharacter` as the base class, extended by `MyPacman` and `MyGhost` to create distinct behaviors and appearances.
+
+## Character Hierarchy
+
+```
+MyCharacter (Base Class)
+├── MyPacman
+└── MyGhost
+```
+
+---
+
+## MyCharacter Base Class
+
+The base class provides core functionality for all moving entities in the game.
+
+### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `dirX` | Number | Current X direction (-1, 0, or 1) |
+| `dirZ` | Number | Current Z direction (-1, 0, or 1) |
+| `speed` | Number | Movement speed (default: 0.15) |
+| `hitbox` | THREE.Box3 | Collision detection box |
+| `model` | THREE.Object3D | Visual 3D model container |
+
+### Key Methods
+
+#### Movement and Rotation
+
+```javascript
+rotate(dir) {
+  if(dir.x == 1) {
+    this.model.rotation.y = 0;  // Face right
+  }
+  else if (dir.x == -1) {
+    this.model.rotation.y = Math.PI;  // Face left
+  }
+  else if (dir.y == 1) {
+    this.model.rotation.y = 3 * Math.PI / 2;  // Face down
+  }
+  else if (dir.y == -1) {
+    this.model.rotation.y = Math.PI / 2;  // Face up
+  }
+}
+```
+
+The character rotates to face the direction of movement using Y-axis rotation.
+
+#### Movement System
+
+```javascript
+move() {
+  switch (this.model.rotation.y) {
+    case 0:
+      this.model.position.x += this.speed;  // Move right
+      break;
+    case Math.PI / 2:
+      this.model.position.z -= this.speed;  // Move up
+      break;
+    case Math.PI:
+      this.model.position.x -= this.speed;  // Move left
+      break;
+    case 3 * Math.PI / 2:
+      this.model.position.z += this.speed;  // Move down
+      break;
+  }
+  
+  // Update hitbox position
+  var hitbox_pos = new THREE.Vector3(
+    this.model.position.x,
+    this.model.position.y,
+    this.model.position.z
+  );
+  this.hitbox.setFromCenterAndSize(hitbox_pos, this.hitbox_size);
+}
+```
+
+<Info>
+  The hitbox is 75% of the tile size (`BOX_SIZE * 0.75`) to allow smooth movement through corridors.
+</Info>
+
+#### Position Adjustment
+
+The `adjustPosition()` method snaps the character to grid positions when changing direction:
+
+```javascript
+adjustPosition() {
+  let pos = new THREE.Vector2(
+    this.getPosition().x / MyConstant.BOX_SIZE,
+    this.getPosition().z / MyConstant.BOX_SIZE
+  );
+  let dir = new THREE.Vector2(this.dirX, this.dirZ);
+  
+  pos = this.adjustedPosition(pos, dir);
+  
+  this.model.position.set(
+    pos.x * MyConstant.BOX_SIZE,
+    this.getPosition().y,
+    pos.y * MyConstant.BOX_SIZE
+  );
+}
+```
+
+---
+
+## MyPacman Class
+
+Pac-Man is constructed from two hemispheres with animated mouth opening/closing.
+
+### Visual Construction
+
+Pac-Man consists of four main parts:
+
+1. **Upper Hemisphere** - Top half of sphere with opening
+2. **Upper Circle** - Flat mouth surface (top)
+3. **Lower Hemisphere** - Bottom half of sphere with opening
+4. **Lower Circle** - Flat mouth surface (bottom)
+
+```javascript
+// Create hemisphere geometry (half sphere with π radians)
+this.sphereGeom = new THREE.SphereGeometry(size, 20.0, 20.0, 0.0, Math.PI);
+this.circleGeom = new THREE.CircleGeometry(size, 20.0, 0.0, Math.PI);
+this.material = MyMaterial.YELLOW;
+
+// Upper half construction
+this.upSphere = new THREE.Mesh(this.sphereGeom, this.material);
+this.upSphere.rotation.y = Math.PI;
+this.upSphere.rotation.x = Math.PI / 2;
+this.upSphere.rotation.z = Math.PI;
+
+this.upCircle = new THREE.Mesh(this.circleGeom, this.material);
+this.upCircle.rotation.x = Math.PI / 2;
+this.upCircle.rotation.z = -Math.PI / 2;
+
+this.upHalf = new THREE.Object3D();
+this.upHalf.add(this.upSphere);
+this.upHalf.add(this.upCircle);
+
+// Lower half (similar structure)
+this.downSphere = new THREE.Mesh(this.sphereGeom, this.material);
+this.downCircle = new THREE.Mesh(this.circleGeom, this.material);
+this.downHalf = new THREE.Object3D();
+this.downHalf.add(this.downSphere);
+this.downHalf.add(this.downCircle);
+```
+
+### Mouth Animation with TWEEN
+
+The mouth opens and closes continuously using TWEEN.js:
+
+```javascript
+var origin = { p : 0 };
+var destiny = { p : Math.PI/4 };  // 45 degree opening
+
+this.moveAnimation = new TWEEN.Tween(origin)
+  .to(destiny, 200)  // 0.2 seconds
+  .onUpdate(function() {
+    that.upSphere.rotation.y = origin.p + Math.PI;
+    that.upCircle.rotation.y = origin.p;
+    that.downSphere.rotation.y = -origin.p;
+    that.downCircle.rotation.y = origin.p;
+  })
+  .repeat(Infinity)
+  .yoyo(true)  // Oscillate back and forth
+  .start();
+```
+
+<Tip>
+  The `yoyo(true)` property makes the animation reverse automatically, creating the chomping effect.
+</Tip>
+
+### Direction Buffering System
+
+Pac-Man uses a direction buffer to queue the next turn:
+
+```javascript
+// Buffer stores the player's intended direction
+this.dirBuffer = new THREE.Vector2(0,0);
+
+// Valid neighbors for current position
+this.validRotationX = new THREE.Vector2(0,0);
+this.validRotationY = new THREE.Vector2(0,0);
+
+rotateBuffer(dir) {
+  this.dirBuffer = dir;  // Queue the input
+}
+
+checkRotation() {
+  if(this.dirBuffer.x != this.dirX || this.dirBuffer.y != this.dirZ) {
+    var validRotation = false;
+    
+    // Check if buffered direction is valid
+    if(this.dirBuffer.x != 0) {
+      if(this.dirBuffer.x == this.validRotationX.x || 
+         this.dirBuffer.x == this.validRotationX.y)
+        validRotation = true;
+    }
+    else if (this.dirBuffer.y != 0) {
+      if(this.dirBuffer.y == this.validRotationY.x || 
+         this.dirBuffer.y == this.validRotationY.y)
+        validRotation = true;
+    }
+    
+    if(validRotation) {
+      // Adjust position to grid before turning
+      if(!(this.dirX == -this.dirBuffer.x || this.dirZ == -this.dirBuffer.y)) {
+        this.adjustPosition();
+      }
+      
+      this.rotate(this.dirBuffer);
+      this.dirBuffer = new THREE.Vector2(0,0);
+    }
+  }
+}
+```
+
+<Info>
+  The direction buffer allows players to press arrow keys slightly before reaching an intersection, making controls feel more responsive.
+</Info>
+
+### Death Animation
+
+The death animation gradually closes Pac-Man's mouth:
+
+```javascript
+startDeathAnimation() {
+  var origin = { p : 0 };
+  var destiny = { p : 3.12414 };  // Almost π (fully closed)
+  
+  var deathAnimation = new TWEEN.Tween(origin)
+    .to(destiny, 1500)  // 1.5 seconds
+    .onUpdate(function() {
+      that.crearNuevo(that.size, origin.p);  // Recreate geometry
+    })
+    .onComplete(function() {
+      that.status = "dead";
+    })
+    .start();
+}
+
+crearNuevo(size, rot) {
+  this.sphereGeom.dispose();
+  // Reduce the angle of the hemisphere as it "closes"
+  this.sphereGeom = new THREE.SphereGeometry(
+    size, 20.0, 20.0, 0.0, Math.PI - rot
+  );
+  this.upSphere.geometry = this.sphereGeom;
+  this.upCircle.rotation.y = rot;
+  this.downSphere.geometry = this.sphereGeom;
+  this.downCircle.rotation.y = rot;
+}
+```
+
+---
+
+## MyGhost Class
+
+Ghosts have a more complex visual structure with multiple components.
+
+### Visual Components
+
+Each ghost consists of:
+
+1. **Cylinder Body** - Main cylindrical body
+2. **Hemisphere Top** - Rounded head
+3. **Eyes** - Two eyeballs with pupils
+4. **Extruded Feet** - Wavy bottom skirt
+
+### Body Construction
+
+```javascript
+// Main body parts
+this.sphereGeom = new THREE.SphereGeometry(size * 4/5, 20.0, 20.0, 0.0, Math.PI);
+this.cylinderGeom = new THREE.CylinderGeometry(
+  size * 4/5,  // Top radius
+  size * 4/5,  // Bottom radius
+  size * 4/3,  // Height
+  20.0         // Radial segments
+);
+
+this.cylinder = new THREE.Mesh(this.cylinderGeom, this.material);
+this.sphere = new THREE.Mesh(this.sphereGeom, this.material);
+this.sphere.position.y = size * 2/3 - 0.1;
+this.sphere.rotation.x = -Math.PI / 2;
+```
+
+### Eye System
+
+```javascript
+// Eye geometry
+this.eyeGeom = new THREE.SphereGeometry(size * 6/25, 20.0, 20.0);
+this.pupilGeom = new THREE.SphereGeometry(size * 2/25, 20.0, 20.0);
+
+// Right eye assembly
+this.rightEye = new THREE.Object3D();
+var rightEyeball = new THREE.Mesh(this.eyeGeom, MyMaterial.WHITE);
+var rightPupil = new THREE.Mesh(this.pupilGeom, MyMaterial.BLACK);
+rightPupil.position.x = size * 6/25 - 0.05;  // Position pupil forward
+this.rightEye.add(rightEyeball);
+this.rightEye.add(rightPupil);
+this.rightEye.position.z = -size * 2/5;
+
+// Left eye (similar structure)
+this.leftEye = new THREE.Object3D();
+// ... left eye construction ...
+this.leftEye.position.z = size * 2/5;
+
+// Combine eyes
+this.eyes = new THREE.Object3D();
+this.eyes.add(this.rightEye);
+this.eyes.add(this.leftEye);
+this.eyes.position.y = size * 2/3;
+this.eyes.position.x = size * 4/5 - 0.1;
+```
+
+### Extruded Feet Geometry
+
+The wavy bottom is created using THREE.ExtrudeGeometry:
+
+```javascript
+// Create triangular wave shape
+var shape = new THREE.Shape();
+shape.lineTo(-1, 3);
+shape.lineTo(1, 3);
+
+var options = {
+  depth: size * 1/3,
+  bevelEnabled: true,
+  bevelSegments: 5,
+  steps: 5,
+  bevelSize: 0.5,
+  bevelThickness: 0.5
+};
+
+this.feetGeom = new THREE.ExtrudeGeometry(shape, options);
+this.feetGeom.scale(0.1, 0.1, 0.1);
+this.feetGeom.translate(0, 0, size * 4/5 - size/10);
+
+// Create 16 wave segments around the ghost
+this.feet = new THREE.Object3D();
+for(var i = 0; i < 16; i++) {
+  var mesh = new THREE.Mesh(this.feetGeom, this.material);
+  mesh.rotation.y = i * (Math.PI / 8);  // Distribute evenly
+  this.feet.add(mesh);
+}
+this.feet.position.y = -size;
+```
+
+<Tip>
+  The 16 rotated triangular extrusions create the classic ghost "skirt" appearance.
+</Tip>
+
+### Ghost Behavior States
+
+Ghosts have multiple behavioral modes:
+
+- **chase** - Normal state, pursuing Pac-Man (original color)
+- **scape** - Scared state when Pac-Man eats a power pill (blue)
+- **return** - Returning to home after being eaten (invisible)
+- **freeze** - Paused state
+- **home** - Starting position
+
+```javascript
+chase() {
+  this.changeColor(this.material);  // Restore original color
+  this.behaviour = "chase";
+  this.path = null;
+}
+
+scare() {
+  this.startInvencibleAnimation();
+  this.changeColor(MyMaterial.BLUE);
+  this.behaviour = "scape";
+  this.path = null;
+}
+
+returnHome() {
+  this.stopInvencibleAnimation();
+  this.speed = this.speed * 2;  // Move faster when returning
+  this.changeColor(MyMaterial.INVISIBLE);
+  this.behaviour = "return";
+  this.path = null;
+}
+```
+
+### Floating Animation
+
+Ghosts have a subtle floating animation:
+
+```javascript
+var origin = { p : this.model.position.y };
+var destiny = { p : this.model.position.y + 0.35 };
+
+var animation = new TWEEN.Tween(origin)
+  .to(destiny, 1000)  // 1 second
+  .onUpdate(function() {
+    that.model.position.y = origin.p;
+  })
+  .repeat(Infinity)
+  .yoyo(true)
+  .start();
+```
+
+---
+
+## Update Loop
+
+Each character updates every frame:
+
+```javascript
+// MyCharacter base update
+update() {
+  this.move();
+}
+
+// MyPacman update
+update() {
+  super.update();          // Call base movement
+  this.checkRotation();    // Process direction buffer
+  TWEEN.update();          // Update animations
+}
+
+// MyGhost update
+update() {
+  if(this.behaviour != "freeze" && this.behaviour != "home") {
+    this.executePath();    // Follow A* pathfinding
+    super.update();
+    TWEEN.update();
+  }
+}
+```
+
+<Info>
+  Ghosts move at 75% of Pac-Man's speed (`this.speed = this.speed * 0.75`), making them slightly slower.
+</Info>

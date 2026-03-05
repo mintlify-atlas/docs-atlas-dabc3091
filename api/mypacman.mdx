@@ -1,0 +1,298 @@
+---
+title: 'MyPacman'
+description: 'Player-controlled Pac-Man character with mouth animation'
+---
+
+## Overview
+
+`MyPacman` extends `MyCharacter` to create the player's character with distinctive mouth-opening animation, death animation, and input buffering for smooth direction changes.
+
+**Inheritance**: `THREE.Object3D` → `MyCharacter` → `MyPacman`
+
+## Constructor
+
+<ParamField path="pos" type="THREE.Vector3">
+  Initial position of Pac-Man in grid coordinates
+</ParamField>
+
+<ParamField path="size" type="number">
+  Radius of the Pac-Man sphere
+</ParamField>
+
+<ParamField path="dir" type="Object">
+  Initial direction with `x` and `y` properties (values: -1, 0, or 1)
+</ParamField>
+
+```javascript
+const pacman = new MyPacman(
+  new THREE.Vector3(1, 0, 1),
+  1.0,
+  {x: 1, y: 0}  // Start facing right
+);
+```
+
+## Properties
+
+### status
+```javascript
+"alive" | "dying" | "dead"
+```
+Current state of Pac-Man. Default: `"alive"`
+
+### dirBuffer
+```javascript
+THREE.Vector2
+```
+Buffered direction input that will be applied when valid. Allows players to queue direction changes before reaching intersections.
+
+### validRotationX
+```javascript
+THREE.Vector2
+```
+Valid X-axis directions at the current position (e.g., `{x: -1, y: 1}` means can go left or right).
+
+### validRotationY
+```javascript
+THREE.Vector2
+```
+Valid Z-axis directions at the current position (e.g., `{x: -1, y: 1}` means can go up or down).
+
+### sphereGeom
+```javascript
+THREE.SphereGeometry
+```
+Geometry for the hemisphere shapes (upper and lower halves).
+
+### circleGeom
+```javascript
+THREE.CircleGeometry
+```
+Geometry for the flat circular mouth surfaces.
+
+### material
+```javascript
+THREE.Material
+```
+Yellow material applied to all Pac-Man surfaces (references `MyMaterial.YELLOW`).
+
+### upSphere
+```javascript
+THREE.Mesh
+```
+Upper hemisphere mesh.
+
+### upCircle
+```javascript
+THREE.Mesh
+```
+Upper mouth circle mesh.
+
+### downSphere
+```javascript
+THREE.Mesh
+```
+Lower hemisphere mesh.
+
+### downCircle
+```javascript
+THREE.Mesh
+```
+Lower mouth circle mesh.
+
+### upHalf
+```javascript
+THREE.Object3D
+```
+Container for upper hemisphere and circle.
+
+### downHalf
+```javascript
+THREE.Object3D
+```
+Container for lower hemisphere and circle.
+
+### moveAnimation
+```javascript
+TWEEN.Tween
+```
+Animation that opens and closes Pac-Man's mouth continuously (0° to 45° rotation, 200ms duration, repeating).
+
+## Methods
+
+### setNeighbors(neighbors)
+Sets the valid movement directions at Pac-Man's current grid position. Called by the game logic when Pac-Man enters a new cell.
+
+**Parameters**:
+- `neighbors` (Array\<number\>) - Array of 4 values: `[left, right, up, down]` where each is -1, 0, or 1
+
+```javascript
+// Allow movement left and right, but not up or down
+pacman.setNeighbors([-1, 1, 0, 0]);
+
+// Allow all four directions (intersection)
+pacman.setNeighbors([-1, 1, -1, 1]);
+```
+
+### rotateBuffer(dir)
+Buffers a direction change request that will be applied when valid.
+
+**Parameters**:
+- `dir` (THREE.Vector2) - Desired direction
+
+```javascript
+// Player presses up arrow - buffer the request
+pacman.rotateBuffer(new THREE.Vector2(0, -1));
+```
+
+### checkRotation()
+Checks if the buffered direction is valid and applies it if possible. Called every frame by `update()`.
+
+```javascript
+// Called automatically in update(), but can be called manually
+pacman.checkRotation();
+```
+
+### die()
+Initiates the death animation sequence. Stops mouth animation and transitions status to "dying".
+
+```javascript
+// Pac-Man touched a ghost
+if (collision && !ghostScared) {
+  pacman.die();
+}
+```
+
+### startDeathAnimation()
+Plays the death animation by gradually closing Pac-Man's mouth from 0° to 180° over 1.5 seconds.
+
+```javascript
+// Called automatically by die() - typically not called directly
+pacman.startDeathAnimation();
+```
+
+### crearNuevo(size, rot)
+Updates Pac-Man's geometry during the death animation to progressively close the mouth.
+
+**Parameters**:
+- `size` (number) - Sphere radius
+- `rot` (number) - Current rotation angle in radians (0 to π)
+
+```javascript
+// Called automatically by startDeathAnimation()
+```
+
+### dispose()
+Cleans up geometries and materials to free memory.
+
+```javascript
+// Before removing Pac-Man from scene
+pacman.dispose();
+scene.remove(pacman);
+```
+
+### update()
+Updates Pac-Man state each frame: moves, checks for valid direction changes, and updates animations.
+
+```javascript
+// In game loop
+function animate() {
+  pacman.update();
+  requestAnimationFrame(animate);
+}
+```
+
+## Usage Example
+
+```javascript
+// Create Pac-Man at starting position
+const pacman = new MyPacman(
+  new THREE.Vector3(14, 0, 23),  // Start position
+  1.0,                            // Size
+  {x: -1, y: 0}                  // Start facing left
+);
+
+scene.add(pacman);
+
+// Handle keyboard input
+document.addEventListener('keydown', (event) => {
+  switch(event.key) {
+    case 'ArrowUp':
+      pacman.rotateBuffer(new THREE.Vector2(0, -1));
+      break;
+    case 'ArrowDown':
+      pacman.rotateBuffer(new THREE.Vector2(0, 1));
+      break;
+    case 'ArrowLeft':
+      pacman.rotateBuffer(new THREE.Vector2(-1, 0));
+      break;
+    case 'ArrowRight':
+      pacman.rotateBuffer(new THREE.Vector2(1, 0));
+      break;
+  }
+});
+
+// Game loop
+function gameLoop() {
+  if (pacman.status === "alive") {
+    // Update valid directions based on grid position
+    const gridPos = getGridPosition(pacman);
+    const neighbors = maze.getNeighbors(gridPos);
+    pacman.setNeighbors(neighbors);
+    
+    // Update movement and animations
+    pacman.update();
+    
+    // Check collision with ghosts
+    for (let ghost of ghosts) {
+      if (checkCollision(pacman, ghost)) {
+        if (ghost.behaviour === "scape") {
+          // Eat the ghost
+          ghost.returnHome();
+          score += 200;
+        } else {
+          // Game over
+          pacman.die();
+        }
+      }
+    }
+  } else if (pacman.status === "dead") {
+    // Handle game over
+    gameOver();
+  }
+  
+  requestAnimationFrame(gameLoop);
+}
+```
+
+## Animation Details
+
+### Mouth Animation
+- **Duration**: 200ms per cycle
+- **Range**: 0° to 45° (π/4 radians)
+- **Type**: Yoyo (ping-pong) with infinite repeat
+- **Effect**: Creates chomping motion
+
+### Death Animation
+- **Duration**: 1500ms (1.5 seconds)
+- **Range**: 0° to ~180° (3.12414 radians)
+- **Type**: One-time, smooth closing
+- **Completion**: Status changes to "dead"
+
+## Direction Buffering
+
+The direction buffering system allows players to input direction changes slightly before reaching an intersection:
+
+1. Player presses a direction key → `rotateBuffer()` stores the input
+2. Each frame, `checkRotation()` verifies if the buffered direction is valid
+3. If valid and not opposite to current direction, Pac-Man snaps to grid and rotates
+4. Buffer is cleared after successful rotation
+
+This creates responsive controls and reduces frustration from timing-sensitive inputs.
+
+## Notes
+
+- Pac-Man is rendered using two hemispheres and two circles to create the iconic shape
+- The mouth opens and closes continuously during normal movement
+- Valid directions must be set each frame based on maze geometry
+- The character automatically snaps to grid positions when changing direction
+- Status should be checked before applying game logic to handle death state

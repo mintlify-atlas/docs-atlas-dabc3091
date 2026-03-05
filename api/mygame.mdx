@@ -1,0 +1,272 @@
+---
+title: MyGame
+description: Core game logic class managing characters, scoring, levels, and gameplay
+---
+
+## Overview
+
+`MyGame` extends `THREE.Object3D` and manages all game-related functionality including character spawning, AI pathfinding, collision detection, scoring, and level progression.
+
+## Constructor
+
+```javascript
+const game = new MyGame(camera)
+```
+
+<ParamField path="camera" type="THREE.Camera">
+  The camera to which UI elements (score, level, controls) will be attached
+</ParamField>
+
+## Properties
+
+<ParamField path="camera" type="THREE.Camera">
+  Reference to the game camera for UI attachment
+</ParamField>
+
+<ParamField path="start" type="boolean">
+  Flag indicating whether the game has started (default: false)
+</ParamField>
+
+<ParamField path="characters" type="Array<MyCharacter>">
+  Array containing all game characters: Pacman (index 0) and 4 ghosts (indices 1-4)
+</ParamField>
+
+<ParamField path="charactersSpawnPosition" type="Array<THREE.Vector3>">
+  Spawn positions for all characters in maze coordinates
+</ParamField>
+
+<ParamField path="maze" type="MyMaze">
+  The procedurally generated maze instance
+</ParamField>
+
+<ParamField path="score" type="number">
+  Current player score (default: 0)
+</ParamField>
+
+<ParamField path="level" type="number">
+  Current game level (default: 0)
+</ParamField>
+
+<ParamField path="title" type="MyTitle">
+  Game title object displayed in the scene
+</ParamField>
+
+<ParamField path="scoreText" type="MyText">
+  "SCORE" label text object attached to camera
+</ParamField>
+
+<ParamField path="levelText" type="MyText">
+  "LEVEL" label text object attached to camera
+</ParamField>
+
+## Methods
+
+### createCharacters()
+
+Creates and initializes Pacman and all four ghosts with their spawn positions and materials.
+
+```javascript
+game.createCharacters()
+```
+
+**Details:**
+- Creates Pacman at position (14, 0, 22) facing right
+- Creates 4 ghosts at positions starting from (13, 0, 13)
+- Assigns ghost materials: Red, Pink, Blue, Orange
+- Sets initial ghost behavior to "home" for ghosts 2-4
+- Adds all characters to the scene
+
+### startGame()
+
+Initializes the game and triggers ghost AI behavior.
+
+```javascript
+game.startGame()
+```
+
+**Details:**
+- Sets `start` flag to true
+- Starts the leave-box animation for ghosts
+- Begins pathfinding updates for all ghosts
+
+### controlTile()
+
+Checks and handles interactions between Pacman and maze tiles.
+
+```javascript
+game.controlTile()
+```
+
+**Details:**
+- Detects when Pacman is standing on a dot (adds 10 points)
+- Detects when Pacman collects a power pill (adds 50 points)
+- Triggers scared behavior for all active ghosts when pill is consumed
+- Updates neighbors for Pacman's current position
+- Removes collected items from the maze
+
+### collisionManager()
+
+Handles all collision detection and resolution for characters and maze walls.
+
+```javascript
+game.collisionManager()
+```
+
+**Details:**
+- Updates all character positions
+- Checks for wall collisions and prevents movement through walls
+- Handles teleport tile interactions
+- Manages Pacman-Ghost collisions:
+  - **Chase mode:** Ghost kills Pacman (triggers respawn)
+  - **Scared mode:** Pacman eats ghost (adds 100 points, ghost returns home)
+
+### moveAI()
+
+Calculates and updates pathfinding for all ghost AI using A* algorithm.
+
+```javascript
+game.moveAI()
+```
+
+**Details:**
+- Runs A* pathfinding for each ghost without an active path
+- Targets depend on ghost behavior:
+  - **Chase:** Path to Pacman's position
+  - **Scared:** Path to random valid position
+  - **Return:** Path to spawn position
+- Prevents ghosts from backtracking in chase mode
+- Optionally visualizes paths if `MyConstant.SHOW_PATH` is enabled
+
+### updateScoreValueText()
+
+Refreshes the score display with the current score value.
+
+```javascript
+game.updateScoreValueText()
+```
+
+**Details:**
+- Removes existing score text from camera
+- Disposes of old text geometry
+- Creates and adds new text with updated score
+
+### updateLevelValueText()
+
+Refreshes the level display with the current level value.
+
+```javascript
+game.updateLevelValueText()
+```
+
+**Details:**
+- Removes existing level text from camera
+- Disposes of old text geometry
+- Creates and adds new text with updated level
+
+### respawn()
+
+Respawns all characters at their starting positions.
+
+```javascript
+game.respawn()
+```
+
+**Details:**
+- Stops the leave-box animation
+- Removes and disposes all current characters
+- Creates fresh character instances
+- Restarts the leave-box animation
+
+### startLeaveBoxAnimation()
+
+Creates a timed animation for ghosts to leave their starting box sequentially.
+
+```javascript
+game.startLeaveBoxAnimation()
+```
+
+**Details:**
+- Duration decreases with level (5000ms - level * 100ms, minimum 3000ms)
+- Releases one ghost every interval
+- Changes ghost behavior from "home" to "chase"
+- Repeats 3 times (for ghosts 2-4)
+
+### nextLevel()
+
+Progresses to the next level with increased difficulty.
+
+```javascript
+game.nextLevel()
+```
+
+**Details:**
+- Increments level counter and updates UI
+- Generates new procedural maze
+- Respawns all characters
+- Decreases ghost pathfinding update time (faster AI)
+- Decreases scared mode duration (harder difficulty)
+
+### update()
+
+Main game loop that updates all game systems each frame.
+
+```javascript
+game.update()
+```
+
+**Details:**
+- Only runs when game has started and Pacman is alive
+- Calls `moveAI()` for ghost pathfinding
+- Calls `collisionManager()` for collision detection
+- Calls `controlTile()` for item collection
+- Checks for level completion (all dots collected)
+- Handles respawn when Pacman dies
+- Updates TWEEN animations
+
+## Example Usage
+
+```javascript
+// Create the game
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000)
+const game = new MyGame(camera)
+
+// Add to scene
+scene.add(game)
+
+// Start the game
+game.startGame()
+
+// In animation loop
+function animate() {
+  requestAnimationFrame(animate)
+  game.update()
+}
+```
+
+## Scoring System
+
+- **Dot:** 10 points
+- **Power Pill:** 50 points
+- **Eating Ghost:** 100 points (when in scared mode)
+
+## Ghost Behaviors
+
+- **home:** Ghost is in starting box, not moving
+- **chase:** Ghost actively pursues Pacman
+- **scared:** Ghost runs away from Pacman (triggered by power pill)
+- **return:** Ghost returning to spawn after being eaten
+- **freeze:** All ghosts freeze when Pacman dies
+
+## Difficulty Scaling
+
+With each level:
+- Ghost pathfinding speed increases (minimum 2000ms update time)
+- Scared mode duration decreases (minimum 100ms)
+- New maze layout is generated
+
+## Related Classes
+
+- [MyScene](/api/myscene) - Main scene management
+- [MyMaze](/api/mymaze) - Procedural maze generation
+- MyPacman - Player character (extends MyCharacter)
+- MyGhost - Enemy character (extends MyCharacter)

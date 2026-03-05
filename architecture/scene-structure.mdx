@@ -1,0 +1,412 @@
+---
+title: 'Scene Structure'
+description: 'Detailed look at MyScene class, cameras, lights, and scene hierarchy'
+---
+
+# Scene Structure
+
+The `MyScene` class is the root container for all game elements, managing the rendering pipeline, cameras, lights, and user input.
+
+## MyScene Class Structure
+
+`MyScene` extends `THREE.Scene` and serves as the top-level orchestrator:
+
+```javascript
+// From MyScene.js:1-46
+class MyScene extends THREE.Scene {
+    constructor (myCanvas) {
+        super();
+        
+        this.renderer = this.createRenderer(myCanvas);
+        this.createLights();
+        this.createCamera();
+        this.camera = 1; // Default to freeCam
+        
+        this.game = new MyGame(this.topCam);
+        this.menu = new MyMenu();
+        this.add(this.menu);
+        
+        this.status = "MENU";
+        this.axis = new THREE.AxesHelper(10);
+        
+        this.pickableObjects = [];
+        this.pickableObjects.push(this.menu.keyPLAY);
+        
+        this.controls = new MyControls();
+    }
+}
+```
+
+### Key Responsibilities
+
+1. **Renderer Management** - Creates and configures the WebGL renderer
+2. **Camera System** - Manages three different camera perspectives
+3. **Lighting Setup** - Configures ambient and spotlight illumination
+4. **Input Handling** - Processes keyboard and mouse events
+5. **Game State** - Controls transitions between menu and gameplay
+
+<Info>
+The scene includes an `AxesHelper` for debugging, which is commented out in production but useful during development.
+</Info>
+
+## Multi-Camera System
+
+The game implements **three distinct cameras** for different gameplay experiences:
+
+### 1. Free Camera (Perspective)
+
+```javascript
+// From MyScene.js:53-60
+this.freeCam = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+this.freeCam.position.set(6, 10.5, 35);
+var lookFree = new THREE.Vector3(6, 11, 0);
+this.freeCam.lookAt(lookFree);
+
+this.add(this.freeCam);
+```
+
+**Properties:**
+- **FOV:** 45°
+- **Position:** `(6, 10.5, 35)`
+- **Look At:** `(6, 11, 0)`
+- **Purpose:** Cinematic view for exploring the scene
+
+**Controls:**
+```javascript
+// From MyScene.js:76-83
+this.cameraControl = new THREE.TrackballControls(this.freeCam, this.renderer.domElement);
+this.cameraControl.rotateSpeed = 5;
+this.cameraControl.zoomSpeed = -2;
+this.cameraControl.panSpeed = 0.5;
+this.cameraControl.target = lookFree;
+```
+
+<Tip>
+The free camera uses TrackballControls for intuitive mouse-based navigation. It's great for showcasing the procedural maze generation.
+</Tip>
+
+### 2. Top-Down Camera (Orthographic Perspective)
+
+```javascript
+// From MyScene.js:62-67
+this.topCam = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+this.topCam.position.set(
+    MyConstant.MAZE_WIDTH/2 * MyConstant.BOX_SIZE, 
+    78, 
+    MyConstant.MAZE_HEIGHT/2 * MyConstant.BOX_SIZE
+);
+var lookFront = new THREE.Vector3(
+    MyConstant.MAZE_WIDTH/2 * MyConstant.BOX_SIZE, 
+    0, 
+    MyConstant.MAZE_HEIGHT/2 * MyConstant.BOX_SIZE
+);
+this.topCam.lookAt(lookFront);
+```
+
+**Properties:**
+- **Position:** Centered above maze at `(30, 78, 30)` (for 30x30 maze)
+- **Look At:** Center of maze at ground level
+- **Purpose:** Primary gameplay camera, classic Pac-Man perspective
+
+**Dynamic Positioning:**
+The camera position is calculated based on maze dimensions:
+```javascript
+MyConstant.MAZE_WIDTH = 30;
+MyConstant.MAZE_HEIGHT = 30;
+MyConstant.BOX_SIZE = 2;
+
+// Camera X = 30/2 * 2 = 30
+// Camera Y = 78 (fixed height)
+// Camera Z = 30/2 * 2 = 30
+```
+
+<Note>
+The top camera is automatically selected when gameplay starts (key 2 or automatic on game start).
+</Note>
+
+### 3. Side Camera (Profile View)
+
+```javascript
+// From MyScene.js:69-74
+this.sideCam = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+this.sideCam.position.set(30, 2, 2);
+var lookSide = new THREE.Vector3(0, 2, 2);
+this.sideCam.lookAt(lookSide);
+
+this.add(this.sideCam);
+```
+
+**Properties:**
+- **Position:** `(30, 2, 2)` - Side view at character height
+- **Look At:** `(0, 2, 2)` - Looks toward maze entrance
+- **Purpose:** Side profile perspective for unique gameplay challenge
+
+### Camera Switching
+
+Players can switch cameras using number keys:
+
+```javascript
+// From MyScene.js:162-172
+onKeyDown(event) {
+    var key = event.which || event.keyCode;
+    
+    if (key == 49) { this.changeCamera(1); }      // Key '1' - Free camera
+    else if (key == 50) { this.changeCamera(2); } // Key '2' - Top camera
+    else if (key == 51) { this.changeCamera(3); } // Key '3' - Side camera
+    else { 
+        this.controls.manager(key, this.game, this.renderer); 
+    }
+}
+```
+
+### Camera Aspect Ratio Management
+
+All cameras automatically update on window resize:
+
+```javascript
+// From MyScene.js:140-155
+setCameraAspect (ratio) {
+    this.getCamera().aspect = ratio;
+    this.getCamera().updateProjectionMatrix();
+}
+
+onWindowResize () {
+    this.setCameraAspect(window.innerWidth / window.innerHeight);
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
+}
+```
+
+## Lighting System
+
+The scene uses a **two-light setup** for balanced illumination:
+
+### Ambient Light
+
+```javascript
+// From MyScene.js:86-93
+createLights () {
+    var ambientLight = new THREE.AmbientLight(0xccddee, 0.35);
+    this.add(ambientLight);
+}
+```
+
+**Properties:**
+- **Color:** `0xccddee` (soft blue-white)
+- **Intensity:** 0.35 (35%)
+- **Purpose:** Provides base illumination to prevent completely black shadows
+
+<Info>
+Ambient light illuminates all objects equally from all directions, ensuring maze walls and characters remain visible even in shadows.
+</Info>
+
+### Spot Light
+
+```javascript
+// From MyScene.js:95-102
+var lightIntensity = 0.5;
+this.spotLight = new THREE.SpotLight(0xffffff, lightIntensity);
+this.spotLight.position.set(0, 35, 100);
+this.add(this.spotLight);
+```
+
+**Properties:**
+- **Color:** `0xffffff` (pure white)
+- **Intensity:** 0.5 (50%)
+- **Position:** `(0, 35, 100)` - Elevated and offset from maze
+- **Target:** `(0, 0, 0)` (default) - Points toward scene origin
+
+**Lighting Diagram:**
+```
+                 SpotLight (0, 35, 100)
+                      |
+                      ↓
+    ═══════════════════════════════
+    ║         Maze (30x30)        ║
+    ║    Ambient Light (global)   ║
+    ║  TopCam (30, 78, 30)        ║
+    ═══════════════════════════════
+```
+
+<Tip>
+The combined lighting (35% ambient + 50% spot) creates depth without harsh shadows, important for gameplay visibility.
+</Tip>
+
+## Scene Hierarchy Organization
+
+The scene graph follows this structure:
+
+```
+MyScene (root)
+├── renderer (WebGLRenderer)
+├── freeCam (PerspectiveCamera)
+│   └── cameraControl (TrackballControls)
+├── topCam (PerspectiveCamera)
+│   ├── scoreText (MyText)
+│   ├── scoreValueText (MyText)
+│   ├── levelText (MyText)
+│   ├── levelValueText (MyText)
+│   ├── controlsText (MyText)
+│   ├── keyLEFT (MyKeyObj)
+│   ├── keyRIGHT (MyKeyObj)
+│   ├── keyDOWN (MyKeyObj)
+│   └── keyUP (MyKeyObj)
+├── sideCam (PerspectiveCamera)
+├── ambientLight (AmbientLight)
+├── spotLight (SpotLight)
+├── axis (AxesHelper) [optional]
+├── menu (MyMenu) [removed on game start]
+└── game (MyGame) [added on game start]
+    ├── title (MyTitle)
+    ├── maze (MyMaze)
+    │   └── tiles[] (MyTile)
+    └── characters[] (MyPacman, MyGhost)
+```
+
+### UI Attachment to Camera
+
+Notice that UI elements (score, level, controls) are attached to `topCam`:
+
+```javascript
+// From MyGame.js:40-54
+var scoreTextPosition = new THREE.Vector3(40, 30, -100);
+this.scoreText = new MyText(scoreTextPosition, 'SCORE', 2, MyMaterial.WHITE, this.fontURL);
+this.camera.add(this.scoreText); // Attached to camera!
+
+this.scoreValueTextPosition = new THREE.Vector3(40, 27, -100);
+this.scoreValueText = new MyText(this.scoreValueTextPosition, this.score.toString(), 2, MyMaterial.WHITE, this.fontURL);
+this.camera.add(this.scoreValueText);
+```
+
+<Note>
+Attaching UI to the camera ensures it stays in a fixed screen position regardless of camera movement. The negative Z position (-100) places it in front of the camera.
+</Note>
+
+## Raycasting for Object Selection
+
+The scene implements raycasting for interactive menu elements:
+
+```javascript
+// From MyScene.js:174-194
+onMouseMove(event) {
+    var mouse = new THREE.Vector2();
+    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = 1 - 2 * (event.clientY / window.innerHeight);
+    
+    var raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(mouse, this.getCamera());
+    var pickedObjects = raycaster.intersectObjects(this.pickableObjects, true);
+    
+    if(pickedObjects.length > 0) {
+        if(!pickedObjects[0].object.userData.userData.selected)
+            pickedObjects[0].object.userData.userData.select();
+    } else {
+        for(var i=0; i<this.pickableObjects.length; i++) {
+            if(this.pickableObjects[i].selected)
+                this.pickableObjects[i].deselect();
+        }
+    }
+}
+```
+
+**Raycasting Flow:**
+1. Convert mouse screen coordinates to normalized device coordinates (-1 to 1)
+2. Create ray from camera through mouse position
+3. Test intersection with `pickableObjects` array
+4. Trigger hover/select states on intersected objects
+
+<Tip>
+The `pickableObjects` array only contains interactive elements (like the play button), optimizing raycast performance.
+</Tip>
+
+## Render Loop Integration
+
+The scene's render method is called every frame:
+
+```javascript
+// From MyScene.js:217-235
+update () {
+    requestAnimationFrame(() => this.update());
+    
+    // Update camera controls (only affects freeCam)
+    this.cameraControl.update();
+    
+    // Billboard effect - title faces active camera
+    this.game.title.lookAt(this.getCamera().position);
+    
+    // Update animated elements
+    this.game.maze.update();
+    
+    // State-specific updates
+    if(this.status == "PACMAN") this.game.update();
+    else if(this.status == "MENU") this.menu.update();
+    
+    // Final render
+    this.renderer.render(this, this.getCamera());
+}
+```
+
+### Billboard Effect
+
+The title text uses a billboard technique to always face the camera:
+
+```javascript
+this.game.title.lookAt(this.getCamera().position);
+```
+
+This ensures readability from any camera angle.
+
+## Performance Optimizations
+
+### Conditional Rendering
+
+```javascript
+if(this.status == "PACMAN") this.game.update();
+else if(this.status == "MENU") this.menu.update();
+```
+
+Only the active game state updates each frame, avoiding unnecessary computations.
+
+### Efficient Camera Switching
+
+```javascript
+// From MyScene.js:123-138
+getCamera () {
+    var cam;
+    switch (this.camera) {
+        case 1: cam = this.freeCam; break;
+        case 2: cam = this.topCam; break;
+        case 3: cam = this.sideCam; break;
+    }
+    return cam;
+}
+```
+
+Simple integer-based camera selection avoids string comparisons in the render loop.
+
+## Scene Configuration Constants
+
+Key scene dimensions are defined in `MyConstant.js:1-12`:
+
+```javascript
+class MyConstant {
+    static MAZE_WIDTH = 30;
+    static MAZE_HEIGHT = 30;
+    static BOX_SIZE = 2;
+    static CHARACTER_SIZE = (this.BOX_SIZE/2) * 0.9;
+    
+    static SHOW_HITBOX = false;
+    static SHOW_MAZE_HITBOX = true;
+    static SHOW_PATH = false;
+    static ACTIVE_SHADER = true;
+}
+```
+
+<Info>
+These constants allow easy adjustment of maze size and enable/disable debug visualizations without changing core logic.
+</Info>
+
+## Next Steps
+
+<Card title="Game Loop" icon="rotate" href="/architecture/game-loop">
+  Learn how the update cycle drives game logic, AI, and collision detection
+</Card>

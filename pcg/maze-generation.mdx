@@ -1,0 +1,336 @@
+---
+title: 'Maze Generation Algorithm'
+description: 'Deep dive into the Tetris-piece-based procedural maze generation system'
+---
+
+# Maze Generation Algorithm
+
+The maze generation system uses a novel **Tetris-piece-based algorithm** to create unique, playable Pac-Man mazes. The algorithm builds mazes in three stages: 1x1 Tetris grid, 3x3 expansion, and final maze assembly.
+
+## Algorithm Overview
+
+The generation process follows this pipeline:
+
+<Steps>
+  <Step title="Tetris Grid Generation">
+    Create a 5x10 grid filled with Tetris-like pieces using `tetrisGenerator()`
+  </Step>
+  
+  <Step title="3x3 Expansion">
+    Expand each 1x1 cell to 3x3 using `tetris3x3Generator()`
+  </Step>
+  
+  <Step title="Maze Assembly">
+    Mirror and assemble the final 28x30 maze with `mazeGenerator()`
+  </Step>
+  
+  <Step title="Portal & Dot Placement">
+    Add portals, dots, and power pills to complete the maze
+  </Step>
+</Steps>
+
+## Tetris Piece System
+
+Each maze cell can connect upward and/or rightward, creating Tetris-like patterns:
+
+```javascript
+// Cell encoding: [connectUp, connectRight]
+var cell = [1, 1];      // Connects both up and right
+var empty = [0, 0];     // No connections (isolated)
+var cellUp = [1, 0];    // Connects only upward
+var cellRight = [0, 1]; // Connects only rightward
+```
+
+### Piece Selection
+
+The `pieceGenerator()` method selects valid Tetris pieces based on position and available space:
+
+```javascript
+pieceGenerator(row, col, map) {
+    var piece = [[0, 0, [...cell]]]; // Default piece
+    
+    // Select piece library based on column
+    var pieces;
+    if (col == 0) {
+        pieces = [...MyPiece.startColPieces];
+    } else if (col == 4) {
+        pieces = [...MyPiece.lastColPieces];
+    } else {
+        pieces = [...MyPiece.allPieces];
+    }
+    
+    // Find all valid pieces that fit in available space
+    var valid_pieces = [];
+    for (var p of pieces) {
+        var valid = true;
+        for (var i = 1; i < p.length && valid; i++) {
+            if (row + p[i][0] >= 0 && row + p[i][0] <= 8 &&
+                col + p[i][1] >= 0 && col + p[i][1] <= 4) {
+                valid = map[row + p[i][0]][col + p[i][1]];
+            } else {
+                valid = false;
+            }
+        }
+        if (valid) {
+            valid_pieces.push([...p]);
+        }
+    }
+    
+    // Randomly select from valid pieces
+    if (valid_pieces.length != 0) {
+        piece = valid_pieces[Math.floor(Math.random() * valid_pieces.length)];
+    }
+    
+    return piece;
+}
+```
+
+## Stage 1: tetrisGenerator()
+
+This method creates a 5x10 grid of Tetris pieces with specific constraints:
+
+```javascript
+tetrisGenerator() {
+    var tetris = [];
+    var map = [];  // Tracks available cells
+    
+    // Initialize 5x10 grid
+    for (let j = 0; j < 10; j++) {
+        tetris.push([...row]);
+        map.push([...mapRow]);
+    }
+    
+    // Reserve space for ghost spawn area (center)
+    tetris[3][0] = [...cellUp];
+    tetris[3][1] = [...cell];
+    map[3][0] = false;
+    map[3][1] = false;
+    tetris[4][0] = [...empty];
+    tetris[4][1] = [...cellRight];
+    map[4][0] = false;
+    map[4][1] = false;
+    
+    // Fill grid column by column
+    var col = 0;
+    var to_explore = [0, 1, 2, 5, 6, 7, 8];
+    
+    while (col < 5) {
+        // Pick random unexplored row
+        var pos = Math.floor(Math.random() * to_explore.length);
+        var random = to_explore[pos];
+        to_explore.splice(pos, 1);
+        
+        // Place piece
+        var piece = this.pieceGenerator(random, col, map);
+        
+        for (var part of piece) {
+            tetris[random + part[0]][col + part[1]] = part[2];
+            map[random + part[0]][col + part[1]] = false;
+        }
+        
+        // Move to next column when current is filled
+        if (to_explore.length == 0) {
+            col++;
+            for (let l = 0; l < 9; l++) {
+                if (map[l][col]) to_explore.push(l);
+            }
+        }
+    }
+    
+    // Ensure Pac-Man spawn area is accessible
+    tetris[5][0][0] = 1;
+    tetris[5][1][0] = 1;
+    tetris[7][0][0] = 1;
+    
+    return tetris;
+}
+```
+
+<Note>
+The algorithm reserves rows 3-4, columns 0-1 for the ghost spawn area, ensuring ghosts have a designated starting position.
+</Note>
+
+## Stage 2: tetris3x3Generator()
+
+Expands the 5x10 Tetris grid into a 14x28 grid by converting each 1x1 cell into a 3x3 block:
+
+```javascript
+tetris3x3Generator() {
+    var tetris = this.tetrisGenerator();
+    var tetris3 = [];  // 15x30 grid
+    
+    // Translate 1x1 to 3x3
+    for (let i = 0; i < 10; i++) {
+        for (let j = 0; j < 5; j++) {
+            var up = tetris[i][j][0];
+            var right = tetris[i][j][1];
+            
+            // Fill 3x3 block
+            for (let k = 0; k < 3; k++) {
+                tetris3[i*3][j*3 + k] = up;
+                tetris3[i*3 + 1][j*3 + k] = 0;  // Wall
+                tetris3[i*3 + 2][j*3 + k] = 0;  // Wall
+            }
+            
+            tetris3[i*3][j*3 + 2] = up | right;
+            tetris3[i*3 + 1][j*3 + 2] = right;
+            tetris3[i*3 + 2][j*3 + 2] = right;
+        }
+    }
+    
+    // Clear ghost spawn area
+    for (let i = 11; i < 14; i++) {
+        for (let j = 1; j < 4; j++) {
+            tetris3[i][j] = 1;  // Empty space
+        }
+    }
+    
+    // Adjust to 28x15 dimensions
+    for (let i = 0; i < 30; i++) {
+        tetris3[i].shift();  // Remove first column
+        tetris3[i].push(0);  // Add wall column at end
+    }
+    
+    tetris3.pop();
+    tetris3.pop();
+    
+    return tetris3;
+}
+```
+
+## Stage 3: mazeGenerator()
+
+Creates the final symmetrical maze and adds game elements:
+
+```javascript
+mazeGenerator() {
+    var maze = [];
+    var tetris3 = this.tetris3x3Generator();
+    
+    // Create 28x30 maze with walls on borders
+    for (let j = 0; j < 30; j++) {
+        maze.push([...wall]);  // All walls initially
+    }
+    
+    // Mirror the half-maze to create symmetry
+    for (let i = 0; i < tetris3.length; i++) {
+        maze[i+1] = ([...tetris3[i]].reverse()).concat(tetris3[i]);
+    }
+    
+    // Generate portals on edges
+    var n_portals = 0;
+    for (let i = 1; i < MAZE_HEIGHT - 1; i++) {
+        if (maze[i][MAZE_WIDTH-2] == 1) {
+            if (maze[i-1][MAZE_WIDTH-2] == 0 &&
+                maze[i+1][MAZE_WIDTH-2] == 0) {
+                maze[i][MAZE_WIDTH-1] = 4;  // Portal
+                maze[i][0] = 4;             // Mirror portal
+                n_portals++;
+            }
+        }
+    }
+    
+    // Fill with dots (avoiding center area)
+    for (let i = 0; i < MAZE_HEIGHT - 1; i++) {
+        for (let j = 0; j < MAZE_WIDTH - 1; j++) {
+            if (j == 8 && i >= 8 && i <= 18) {
+                j = 22;  // Skip center
+            }
+            if (maze[i][j] == 1) {
+                maze[i][j] = 2;  // Dot
+            }
+        }
+    }
+    
+    // Add power pills in corners
+    var row1 = 4, row2 = 25;
+    while (maze[row1][1] != 2 || maze[row1][0] != 0) row1++;
+    maze[row1][1] = 3;  // Pill
+    maze[row1][MAZE_WIDTH - 2] = 3;
+    
+    while (maze[row2][1] != 2 || maze[row2][0] != 0) row2--;
+    maze[row2][1] = 3;
+    maze[row2][MAZE_WIDTH - 2] = 3;
+    
+    return maze;
+}
+```
+
+## Maze Element Types
+
+The final maze uses the following tile codes:
+
+| Code | Tile Type | Description |
+|------|-----------|-------------|
+| 0 | Wall | Solid obstacle, uses shader material |
+| 1 | Empty | Walkable space, no collectibles |
+| 2 | Dot | Small collectible (10 points) |
+| 3 | Pill | Power pill (50 points, scares ghosts) |
+| 4 | Portal | Teleports to opposite side of maze |
+
+<Warning>
+The algorithm ensures the ghost spawn area (center) and Pac-Man spawn area (bottom center) are always clear and accessible.
+</Warning>
+
+## Portal Placement Strategy
+
+Portals are strategically placed on maze edges:
+
+1. **Primary Strategy**: Find positions where the second-to-last column is empty (1) and surrounded by walls above and below
+2. **Fallback Strategy**: If no ideal positions exist, find any valid corridor position
+3. **Guarantee**: At least one portal pair is always generated
+
+```javascript
+// Portal generation ensures symmetric placement
+if (n_portals == 0) {
+    var can_portal = [];
+    for (let i = 1; i < MAZE_HEIGHT - 1; i++) {
+        if (maze[i][MAZE_WIDTH-2] == 1) {
+            if (maze[i-1][MAZE_WIDTH-2] == 1 &&
+                maze[i+1][MAZE_WIDTH-2] == 1 &&
+                maze[i][MAZE_WIDTH-3] == 1) {
+                can_portal.push(i);
+            }
+        }
+    }
+    var pos = can_portal.length != 0 
+        ? can_portal[Math.floor(Math.random() * can_portal.length)] 
+        : 1;
+    maze[pos][MAZE_WIDTH-1] = 4;
+    maze[pos][0] = 4;
+}
+```
+
+## Visualization
+
+The generation process can be visualized as:
+
+```
+Stage 1 (5x10)     Stage 2 (14x28)        Stage 3 (28x30)
+Tetris Grid    →   3x3 Expansion      →   Mirrored + Elements
+
+[1,1][1,0]         111 100                 WWWWWWWWWWWWWWW...
+[0,1][1,1]         000 000                 WddddddWddddddW...
+[1,0][0,0]    →    000 000           →    WdWWWdWdWWWWdW...
+  ...              100 000                 WdddddddddPdddW...
+                   ...  ...                WWWWWWWWWWWWWWW...
+                   
+W=Wall(0) d=Dot(2) P=Pill(3) T=Portal(4)
+```
+
+## Key Advantages
+
+<CardGroup cols={2}>
+  <Card title="Guaranteed Solvability" icon="check">
+    Tetris-piece constraints ensure all areas are reachable
+  </Card>
+  <Card title="Structural Variety" icon="shuffle">
+    Random piece selection creates diverse maze layouts
+  </Card>
+  <Card title="Symmetrical Balance" icon="reflect-horizontal">
+    Mirroring ensures fair gameplay on both sides
+  </Card>
+  <Card title="Controlled Complexity" icon="sliders">
+    Ghost spawn and portal placement follow consistent rules
+  </Card>
+</CardGroup>

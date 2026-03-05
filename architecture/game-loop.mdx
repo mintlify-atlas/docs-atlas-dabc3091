@@ -1,0 +1,667 @@
+---
+title: 'Game Loop'
+description: 'Deep dive into the update cycle, game state management, collision detection, and AI'
+---
+
+# Game Loop
+
+The game loop is the heartbeat of Procedural Pac-Man 3D, orchestrating all real-time updates including AI pathfinding, collision detection, scoring, and animations.
+
+## The Update Cycle
+
+The game uses the standard **requestAnimationFrame** pattern for smooth 60 FPS rendering:
+
+```javascript
+// From MyScene.js:217-235
+update () {
+    // Schedule next frame
+    requestAnimationFrame(() => this.update());
+    
+    // Update camera controls
+    this.cameraControl.update();
+    
+    // Update visual elements
+    this.game.title.lookAt(this.getCamera().position);
+    this.game.maze.update();
+    
+    // State-specific logic
+    if(this.status == "PACMAN") this.game.update();
+    else if(this.status == "MENU") this.menu.update();
+    
+    // Render to screen
+    this.renderer.render(this, this.getCamera());
+}
+```
+
+### requestAnimationFrame Benefits
+
+<Info>
+`requestAnimationFrame` synchronizes with the browser's repaint cycle, providing:
+- **Optimal frame rate** (typically 60 FPS)
+- **Automatic throttling** when tab is inactive
+- **Better performance** than setTimeout/setInterval
+</Info>
+
+## MyGame Update Method
+
+The core gameplay logic resides in `MyGame.update()`, called every frame during active gameplay:
+
+```javascript
+// From MyGame.js:330-344
+update() {
+    if(this.start && this.characters[0].status == "alive") {
+        this.moveAI();           // Update ghost pathfinding
+        this.collisionManager(); // Detect and handle collisions
+        this.controlTile();      // Check tile interactions (dots, pills)
+        
+        if(this.maze.getDotNumber() == 0) {
+            this.nextLevel();    // Progress to next level
+        }
+    }
+    else if(this.characters[0].status == "dead") {
+        this.respawn();          // Reset characters
+    }
+    TWEEN.update();              // Update all animations
+}
+```
+
+### Update Flow Diagram
+
+```
+┌─────────────────────────────────┐
+│   requestAnimationFrame         │
+└────────────┬────────────────────┘
+             ↓
+┌─────────────────────────────────┐
+│   MyScene.update()              │
+│   - Update camera controls      │
+│   - Update maze animations      │
+└────────────┬────────────────────┘
+             ↓
+┌─────────────────────────────────┐
+│   MyGame.update()               │
+│   ┌───────────────────────────┐ │
+│   │ 1. moveAI()               │ │
+│   │    - Calculate paths      │ │
+│   │    - Update ghost AI      │ │
+│   └───────────────────────────┘ │
+│   ┌───────────────────────────┐ │
+│   │ 2. collisionManager()     │ │
+│   │    - Move all characters  │ │
+│   │    - Detect wall hits     │ │
+│   │    - Handle teleports     │ │
+│   │    - Ghost vs Pacman      │ │
+│   └───────────────────────────┘ │
+│   ┌───────────────────────────┐ │
+│   │ 3. controlTile()          │ │
+│   │    - Check current tile   │ │
+│   │    - Collect dots/pills   │ │
+│   │    - Update score         │ │
+│   └───────────────────────────┘ │
+│   ┌───────────────────────────┐ │
+│   │ 4. Check win condition    │ │
+│   └───────────────────────────┘ │
+└────────────┬────────────────────┘
+             ↓
+┌─────────────────────────────────┐
+│   TWEEN.update()                │
+│   - Ghost leave animation       │
+│   - Scare timer animations      │
+└─────────────────────────────────┘
+```
+
+## Game State Management
+
+The game tracks state at multiple levels:
+
+### Scene-Level State
+
+```javascript
+// From MyScene.js:22
+this.status = "MENU"; // or "PACMAN"
+```
+
+**State Transition:**
+```javascript
+// From MyScene.js:206-212
+onMouseClick(event) {
+    if(pickedObjects.length > 0) {
+        this.remove(this.menu);
+        this.game.startGame();
+        this.add(this.game);
+        this.status = "PACMAN";      // State change
+        this.changeCamera(2);         // Switch to top camera
+    }
+}
+```
+
+### Game-Level State
+
+```javascript
+// From MyGame.js:7
+this.start = false; // Becomes true when startGame() is called
+```
+
+### Character-Level State
+
+```javascript
+// Pacman states: "alive" or "dead"
+this.characters[0].status
+
+// Ghost behaviors: "home", "chase", "scape", "return", "freeze"
+this.characters[i].behaviour
+```
+
+<Tip>
+The multi-level state system allows independent control of different game aspects without complex state machines.
+</Tip>
+
+## AI Update System
+
+Ghost AI uses **A* pathfinding** recalculated periodically:
+
+```javascript
+// From MyGame.js:193-257
+moveAI() {
+    for(var i = 1; i < this.characters.length; i++) {
+        var character = this.characters[i];
+        
+        // Only recalculate if path is exhausted and ghost is active
+        if(character.path == null && 
+           (character.behaviour != "freeze" && character.behaviour != "home")) {
+            
+            // Clear previous path visualization
+            if(MyConstant.SHOW_PATH) {
+                this.maze.clearColor(character.material);
+            }
+            
+            // Get ghost position and direction
+            let pos = new THREE.Vector2(
+                character.getPosition().x / MyConstant.BOX_SIZE, 
+                character.getPosition().z / MyConstant.BOX_SIZE
+            );
+            let dir = new THREE.Vector2(character.dirX, character.dirZ);
+            pos = character.adjustedPosition(pos, dir);
+            
+            // Create pathfinding graph
+            var ghostMaze = [...this.maze.mazeData];
+            ghostMaze.forEach((row, rowIndex) => ghostMaze[rowIndex] = [...row]);
+            
+            // Prevent backtracking in chase mode
+            if(character.behaviour == "chase") {
+                ghostMaze[pos.y - dir.y][pos.x - dir.x] = 0;
+            }
+            
+            var graph = new Graph(ghostMaze);
+            var start = graph.grid[pos.y][pos.x];
+            
+            // Determine target based on behavior
+            var end;
+            if(character.behaviour == "chase") {
+                // Target: Pacman's position
+                var pPos = new THREE.Vector2(
+                    this.characters[0].getPosition().x / MyConstant.BOX_SIZE,
+                    this.characters[0].getPosition().z / MyConstant.BOX_SIZE
+                );
+                var pDir = new THREE.Vector2(this.characters[0].dirX, this.characters[0].dirZ);
+                pPos = this.characters[0].adjustedPosition(pPos, pDir);
+                end = graph.grid[pPos.y][pPos.x];
+            }
+            else if(character.behaviour == "scape") {
+                // Target: Random valid position
+                var random = this.maze.getRandomValidPosition();
+                end = graph.grid[random.x][random.y];
+            }
+            else if(character.behaviour == "return") {
+                // Target: Ghost spawn position
+                end = graph.grid[this.charactersSpawnPosition[i].z][this.charactersSpawnPosition[i].x];
+            }
+            
+            // Calculate path using A*
+            var result = astar.search(graph, start, end);
+            
+            if(result.length == 0) result = null;
+            else {
+                // Visualize path (debug mode)
+                if(MyConstant.SHOW_PATH) {
+                    for(let path of result) {
+                        var pos_check = path.x * (MyConstant.MAZE_WIDTH) + path.y;
+                        this.maze.children[pos_check].square.material = character.material;
+                    }
+                }
+            }
+            
+            character.path = result;
+        }
+    }
+}
+```
+
+### AI Behavior Modes
+
+| Behavior | Target | Trigger | Path Update Frequency |
+|----------|--------|---------|----------------------|
+| **home** | N/A | Initial state | No pathfinding |
+| **chase** | Pacman's position | Default active state | Every 2500-5000ms (level-dependent) |
+| **scape** | Random position | Power pill eaten | While scared |
+| **return** | Spawn position | Caught while scared | Until reaching home |
+| **freeze** | N/A | Pacman dies | No movement |
+
+<Note>
+The AI recalculates paths periodically rather than every frame, balancing intelligence with performance. Ghost speed increases with level progression.
+</Note>
+
+### Progressive Difficulty
+
+```javascript
+// From MyGame.js:307-328
+nextLevel() {
+    this.level += 1;
+    this.updateLevelValueText();
+    
+    // Regenerate maze
+    this.remove(this.maze);
+    this.maze.dispose();
+    this.maze = new MyMaze(MyConstant.BOX_SIZE);
+    this.add(this.maze);
+    
+    // Respawn characters
+    this.respawn();
+    
+    // Increase AI update speed (faster pathfinding)
+    var time = this.characters[1].updatePathTime - this.level * 200;
+    if(time < 2500) time = 2000; // Cap at 2 seconds
+    for(var i = 1; i < 5; i++) {
+        this.characters[i].setUpdatePathTime(time);
+    }
+    
+    // Decrease scare duration
+    var duration = this.characters[1].scareTime - this.level * 500;
+    if(duration < 100) duration = 100; // Min 100ms
+    for(var i = 1; i < 5; i++) {
+        this.characters[i].setScareTime(duration);
+    }
+}
+```
+
+## Collision Detection
+
+Collision handling is the most complex part of the update cycle:
+
+```javascript
+// From MyGame.js:142-191
+collisionManager() {
+    // Part 1: Character-Wall Collisions
+    for(let character of this.characters) {
+        let lastPos = new THREE.Vector2(character.getPosition().x, character.getPosition().z);
+        
+        // Move character
+        character.update();
+        
+        // Get new position
+        let pos = new THREE.Vector2(
+            character.getPosition().x / MyConstant.BOX_SIZE, 
+            character.getPosition().z / MyConstant.BOX_SIZE
+        );
+        let dir = new THREE.Vector2(character.dirX, character.dirZ);
+        pos = character.adjustedPosition(pos, dir);
+        
+        // Check collision with maze
+        if(this.maze.checkCollision(character.getCollisionBox(), pos, dir)) {
+            let collisionType = this.maze.collisionType(pos, dir);
+            
+            // Handle teleportation
+            if(collisionType == 4) { 
+                let teleportPos = this.maze.getOtherTeleport(pos, dir);
+                lastPos = new THREE.Vector2(
+                    teleportPos.y * MyConstant.BOX_SIZE + dir.x * MyConstant.BOX_SIZE/2, 
+                    teleportPos.x * MyConstant.BOX_SIZE
+                );
+                character.setPosition2D(teleportPos);
+            }
+            
+            // Revert to last valid position
+            character.setPosition2D(lastPos);
+            
+            // Reset ghost AI on wall collision
+            if(character != this.characters[0]) {
+                character.path = null;
+                character.adjustPosition();
+            }
+        }
+    }
+    
+    // Part 2: Ghost-Pacman Collisions
+    for(var i = 1; i < 5; i++) {
+        if(this.characters[i].behaviour != "return") {
+            if(this.characters[i].hitbox.intersectsBox(this.characters[0].hitbox)) {
+                
+                if(this.characters[i].behaviour == "chase") {
+                    // Ghost catches Pacman - Game Over
+                    for(var j = 1; j < 5; j++) {
+                        this.characters[j].behaviour = "freeze";
+                    }
+                    this.characters[0].die();
+                }
+                else if(this.characters[i].behaviour == "scape") {
+                    // Pacman eats scared ghost
+                    this.characters[i].returnHome();
+                    this.score += 100;
+                    this.updateScoreValueText();
+                }
+            }
+        }
+    }
+}
+```
+
+### Collision Detection Stages
+
+#### 1. Movement
+
+Each character moves first:
+
+```javascript
+// From MyCharacter.js:98-116
+move() {
+    switch (this.model.rotation.y) {
+        case 0:                  // Right
+            this.model.position.x += this.speed;
+            break;
+        case Math.PI / 2:        // Up
+            this.model.position.z -= this.speed;
+            break;
+        case Math.PI:            // Left
+            this.model.position.x -= this.speed;
+            break;
+        case 3 * Math.PI / 2:    // Down
+            this.model.position.z += this.speed;
+            break;
+    }
+    
+    // Update hitbox position
+    var hitbox_pos = new THREE.Vector3(
+        this.model.position.x, 
+        this.model.position.y, 
+        this.model.position.z
+    );
+    this.hitbox.setFromCenterAndSize(hitbox_pos, this.hitbox_size);
+}
+```
+
+<Info>
+Movement speed is constant at `0.15` units per frame (from MyCharacter.js:8), resulting in smooth character motion.
+</Info>
+
+#### 2. Wall Collision Check
+
+Maze collision checking is optimized:
+
+```javascript
+// From MyMaze.js:583-611
+checkCollision(hitbox, pos, dir) {
+    var collision = false;
+    var pos_check;
+    var pos_aux;
+    
+    // Determine which coordinate to check perpendicular to movement
+    if(dir.x != 0) {
+        pos_aux = pos.y; // Moving horizontally, check vertical neighbors
+    } else {
+        pos_aux = pos.x; // Moving vertically, check horizontal neighbors
+    }
+    
+    // Only check 3 tiles in movement direction
+    for(var i = pos_aux - 1; i <= pos_aux + 1 && !collision; i++) {
+        if(dir.x != 0) {
+            pos_check = i * (MyConstant.MAZE_WIDTH) + (pos.x + dir.x);
+        } else {
+            pos_check = (pos.y + dir.y) * (MyConstant.MAZE_WIDTH) + i;
+        }
+        
+        if(this.children[pos_check].has_hitbox) {
+            var box = this.children[pos_check].getCollisionBox();
+            collision = box.intersectsBox(hitbox);
+        }
+    }
+    
+    return collision;
+}
+```
+
+**Optimization:** Only 3 tiles are checked (current + 2 adjacent), not all 900 tiles.
+
+#### 3. Teleport Handling
+
+Special collision type 4 triggers teleportation:
+
+```javascript
+// From MyMaze.js:505-525
+getOtherTeleport(pos, dir) {
+    var position = new THREE.Vector2(pos.y + dir.y, pos.x + dir.x);
+    var index = -1;
+    
+    // Find which teleport was entered
+    for(let i = 0; i < this.teleportPositions.length && index == -1; i++) {
+        if(this.teleportPositions[i].x == position.x &&
+           this.teleportPositions[i].y == position.y) {
+            index = i;
+        }
+    }
+    
+    // Teleport to paired portal (even↔odd indices)
+    var newPos;
+    if(index % 2 == 0) {
+        newPos = new THREE.Vector2(
+            this.teleportPositions[index+1].x, 
+            this.teleportPositions[index+1].y
+        );
+    } else {
+        newPos = new THREE.Vector2(
+            this.teleportPositions[index-1].x, 
+            this.teleportPositions[index-1].y
+        );
+    }
+    
+    return newPos;
+}
+```
+
+#### 4. Entity-Entity Collision
+
+Ghost-Pacman collisions use Three.js Box3 intersection:
+
+```javascript
+// From MyCharacter.js:10-18
+this.hitbox = new THREE.Box3();
+var hitbox_pos = new THREE.Vector3(
+    pos.x * MyConstant.BOX_SIZE, 
+    pos.y * MyConstant.BOX_SIZE, 
+    pos.z * MyConstant.BOX_SIZE
+);
+this.hitbox_size = new THREE.Vector3(
+    MyConstant.BOX_SIZE * 0.75, 
+    MyConstant.BOX_SIZE * 0.75, 
+    MyConstant.BOX_SIZE * 0.75
+);
+this.hitbox.setFromCenterAndSize(hitbox_pos, this.hitbox_size);
+```
+
+<Tip>
+Hitboxes are 75% of tile size, providing forgiving collision detection for better gameplay feel.
+</Tip>
+
+## Tile Control System
+
+The tile control system handles dot collection and power pills:
+
+```javascript
+// From MyGame.js:114-140
+controlTile() {
+    // Get Pacman's tile position
+    let pos = new THREE.Vector2(
+        this.characters[0].getPosition().x / MyConstant.BOX_SIZE, 
+        this.characters[0].getPosition().z / MyConstant.BOX_SIZE
+    );
+    let dir = new THREE.Vector2(this.characters[0].dirX, this.characters[0].dirZ);
+    pos = this.characters[0].adjustedPosition(pos, dir);
+    
+    // Update Pacman's available moves
+    this.characters[0].setNeightbors(this.maze.getNeighbors(pos));
+    
+    // Check what's on current tile
+    let tileType = this.maze.getTileType(pos);
+    
+    if(tileType == 2) { // Standing on dot
+        this.maze.removeDot(pos);
+        this.score += 10;
+        this.updateScoreValueText();
+    }
+    else if(tileType == 3) { // Standing on power pill
+        this.maze.removeDot(pos);
+        this.score += 50;
+        this.updateScoreValueText();
+        
+        // Scare all active ghosts
+        for(var i = 1; i < 5; i++) {
+            if(this.characters[i].behaviour != "home" && 
+               this.characters[i].behaviour != "return") {
+                this.characters[i].scare();
+            }
+        }
+    }
+}
+```
+
+### Scoring System
+
+| Item | Points |
+|------|--------|
+| Small Dot | 10 |
+| Power Pill | 50 |
+| Scared Ghost | 100 |
+
+### Score Display Update
+
+Score text is regenerated on each update:
+
+```javascript
+// From MyGame.js:259-266
+updateScoreValueText() {
+    if(this.scoreValueText != undefined) {
+        this.camera.remove(this.scoreValueText);
+        this.scoreValueText.dispose();
+        this.scoreValueText = new MyText(
+            this.scoreValueTextPosition,
+            this.score.toString(),
+            2,
+            MyMaterial.WHITE,
+            this.fontURL
+        );
+        this.camera.add(this.scoreValueText);
+    }
+}
+```
+
+<Note>
+Text geometry must be recreated when content changes, as Three.js text isn't mutable like DOM elements.
+</Note>
+
+## Animation System
+
+The game uses TWEEN.js for time-based animations:
+
+### Ghost Release Animation
+
+```javascript
+// From MyGame.js:291-305
+startLeaveBoxAnimation() {
+    var val = 2; // Start with ghost index 2
+    var duration = 5000 - this.level * 100;
+    if(duration < 3000) duration = 3000;
+    var that = this;
+    
+    this.leaveBoxAnimation = new TWEEN.Tween(origin)
+        .duration(duration)
+        .onRepeat(function() {
+            that.characters[val].changeBehaviour("chase");
+            val = val + 1;
+        })
+        .repeat(3) // Release 3 ghosts (one already active)
+        .start();
+}
+```
+
+**Behavior:**
+- Ghosts are released one at a time from their starting box
+- Release interval decreases with level (5s → 3s minimum)
+- First ghost starts chasing immediately
+- Remaining 3 ghosts wait for their turn
+
+### TWEEN Update
+
+```javascript
+// From MyGame.js:343
+TWEEN.update();
+```
+
+Must be called every frame to progress all active tweens.
+
+<Info>
+TWEEN animations are independent of game state, allowing smooth transitions even during gameplay pauses.
+</Info>
+
+## Performance Considerations
+
+### Frame Budget
+
+At 60 FPS, each frame has ~16.67ms budget:
+
+```
+MyScene.update()           ~0.5ms
+├── Camera controls        ~0.1ms
+├── MyGame.update()        ~10-15ms
+│   ├── moveAI()           ~5-10ms (A* pathfinding)
+│   ├── collisionManager() ~3-4ms
+│   └── controlTile()      ~0.5ms
+├── TWEEN.update()         ~0.1ms
+└── renderer.render()      ~1-2ms
+
+Total: ~12-18ms (within budget)
+```
+
+### Optimization Strategies
+
+1. **Lazy AI Recalculation** - Paths only recalculate when exhausted
+2. **Spatial Partitioning** - Only check nearby tiles for collisions
+3. **Early Exit Conditions** - Loops terminate as soon as collision found
+4. **Object Reuse** - Characters respawn instead of recreate
+5. **Conditional Updates** - Menu doesn't update during gameplay
+
+<Tip>
+Enable debug constants (`SHOW_PATH`, `SHOW_HITBOX`) to visualize performance-critical systems during development.
+</Tip>
+
+## Game Loop Summary
+
+The game loop orchestrates:
+
+1. ✅ **AI Pathfinding** - Ghosts calculate routes using A*
+2. ✅ **Character Movement** - Position updates based on direction
+3. ✅ **Collision Detection** - Wall and entity intersections
+4. ✅ **Game Logic** - Scoring, power-ups, win/lose conditions
+5. ✅ **Animations** - TWEEN-based smooth transitions
+6. ✅ **Rendering** - Final scene composition
+
+All within a 60 FPS budget for smooth, responsive gameplay.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Architecture Overview" icon="sitemap" href="/architecture/overview">
+    Return to the high-level architecture overview
+  </Card>
+  <Card title="Scene Structure" icon="cube" href="/architecture/scene-structure">
+    Learn about cameras, lights, and scene organization
+  </Card>
+</CardGroup>

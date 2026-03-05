@@ -1,0 +1,92 @@
+---
+title: "Introduction"
+description: "A 3D Pac-Man game with procedural content generation built using Three.js"
+---
+
+## Welcome to Procedural Pac-Man 3D
+
+This project explores **procedural content generation (PCG)** techniques applied to a classic arcade game reimagined in 3D. Built entirely with Three.js without relying on game engines like Unity or Unreal, this implementation demonstrates how PCG can breathe new life into familiar gameplay.
+
+<CardGroup cols={2}>
+  <Card title="Play the Game" icon="gamepad" href="https://gsandoval96.github.io/TFG-UGR/pacman/src/">
+    Try the live demo and experience procedurally generated mazes
+  </Card>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Get the game running locally in minutes
+  </Card>
+  <Card title="View Source" icon="github" href="https://github.com/Gsandoval96/TFG-UGR">
+    Explore the complete source code on GitHub
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/myscene">
+    Deep dive into the game's architecture and classes
+  </Card>
+</CardGroup>
+
+## What Makes This Special?
+
+This isn't just another Pac-Man clone. The project combines classic gameplay with modern procedural generation techniques:
+
+### Procedural Maze Generation
+Every level features a unique maze layout generated using a Tetris-piece-based algorithm. Unlike the original game's static level design, each playthrough offers fresh challenges with randomly generated corridors, walls, and power-up placements.
+
+### Dynamic Voronoi Textures
+Wall textures are procedurally generated using Voronoi tessellation with custom GLSL shaders, creating unique visual patterns for each maze that enhance the 3D environment without relying on pre-made texture assets.
+
+### Intelligent Ghost AI
+Ghost behavior uses the A* pathfinding algorithm with state machines to create challenging opponents. The AI difficulty dynamically adjusts based on the current level, making the game progressively harder as you advance.
+
+### Pure Three.js Implementation
+Built from the ground up using Three.js for 3D graphics rendering, without depending on game engines. This approach provides deeper control over rendering, physics, and game logic while demonstrating low-level game development techniques.
+
+## Key Features
+
+<CardGroup cols={3}>
+  <Card title="Procedural Mazes" icon="maze">
+    Tetris-piece algorithm generates unique maze layouts every game
+  </Card>
+  <Card title="Voronoi Textures" icon="grid-2" >
+    GLSL shaders create procedural wall textures
+  </Card>
+  <Card title="A* Pathfinding" icon="route">
+    Smart ghost AI uses optimal pathfinding algorithms
+  </Card>
+  <Card title="3D Rendering" icon="cube">
+    Full 3D graphics with Three.js, no game engine required
+  </Card>
+  <Card title="Multi-Camera System" icon="camera">
+    Switch between free, top-down, and side camera views
+  </Card>
+  <Card title="Progressive Difficulty" icon="chart-line">
+    Dynamic parameters adjust AI behavior as levels increase
+  </Card>
+</CardGroup>
+
+## Project Background
+
+This project was developed as a Bachelor's thesis (TFG) at the University of Granada to explore:
+
+- **Procedural Content Generation** techniques and their application to classic games
+- **Low-level game development** without relying on commercial game engines
+- **Graphics programming** using WebGL through Three.js
+- **AI pathfinding algorithms** for game character behavior
+
+<Info>
+The complete thesis document (in Spanish) provides detailed explanations of the PCG algorithms, implementation decisions, and game architecture.
+</Info>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start Guide" icon="play" href="/quickstart">
+    Run the game locally and explore the code
+  </Card>
+  <Card title="Architecture Overview" icon="sitemap" href="/architecture/overview">
+    Understand how the game is structured
+  </Card>
+  <Card title="Maze Generation" icon="dice" href="/pcg/maze-generation">
+    Learn how procedural mazes are created
+  </Card>
+  <Card title="Core Classes" icon="book-open" href="/api/myscene">
+    Browse the complete API reference
+  </Card>
+</CardGroup>

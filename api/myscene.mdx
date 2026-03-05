@@ -1,0 +1,243 @@
+---
+title: MyScene
+description: Main scene class that manages the 3D environment, cameras, and game state
+---
+
+## Overview
+
+`MyScene` extends `THREE.Scene` and serves as the main container for the Pac-Man 3D game. It manages the WebGL renderer, multiple camera views, game state transitions, and user input handling.
+
+## Constructor
+
+```javascript
+const scene = new MyScene(myCanvas)
+```
+
+<ParamField path="myCanvas" type="string">
+  The DOM selector for the canvas element where the scene will be rendered (e.g., "#WebGL-output")
+</ParamField>
+
+## Properties
+
+<ParamField path="renderer" type="THREE.WebGLRenderer">
+  The WebGL renderer instance that handles all scene rendering
+</ParamField>
+
+<ParamField path="freeCam" type="THREE.PerspectiveCamera">
+  Free perspective camera with trackball controls for flexible viewing
+</ParamField>
+
+<ParamField path="topCam" type="THREE.PerspectiveCamera">
+  Top-down orthographic-style camera positioned directly above the maze
+</ParamField>
+
+<ParamField path="sideCam" type="THREE.PerspectiveCamera">
+  Side view camera for an alternative perspective of the game
+</ParamField>
+
+<ParamField path="camera" type="number">
+  Current active camera index (1 = freeCam, 2 = topCam, 3 = sideCam)
+</ParamField>
+
+<ParamField path="cameraControl" type="THREE.TrackballControls">
+  Camera controls for the free camera, allowing orbit, zoom, and pan
+</ParamField>
+
+<ParamField path="game" type="MyGame">
+  The game instance containing maze, characters, and game logic
+</ParamField>
+
+<ParamField path="menu" type="MyMenu">
+  The main menu instance displayed before game starts
+</ParamField>
+
+<ParamField path="status" type="string">
+  Current application state: "MENU" or "PACMAN"
+</ParamField>
+
+<ParamField path="pickableObjects" type="Array<THREE.Object3D>">
+  Array of objects that can be selected with the mouse (e.g., menu buttons)
+</ParamField>
+
+<ParamField path="controls" type="MyControls">
+  Keyboard input handler for game controls
+</ParamField>
+
+## Methods
+
+### createCamera()
+
+Initializes all three camera perspectives with appropriate positions and orientations.
+
+```javascript
+scene.createCamera()
+```
+
+**Details:**
+- Creates freeCam positioned at (6, 10.5, 35)
+- Creates topCam positioned directly above maze center
+- Creates sideCam positioned at (30, 2, 2)
+- Sets up TrackballControls for the free camera
+
+### createLights()
+
+Sets up ambient and spotlight illumination for the scene.
+
+```javascript
+scene.createLights()
+```
+
+**Details:**
+- Adds ambient light with color 0xccddee and intensity 0.35
+- Adds spotlight at position (0, 35, 100) with intensity 0.5
+
+### createRenderer(myCanvas)
+
+Creates and configures the WebGL renderer.
+
+```javascript
+const renderer = scene.createRenderer(myCanvas)
+```
+
+<ParamField path="myCanvas" type="string">
+  DOM selector for the canvas element
+</ParamField>
+
+**Returns:** `THREE.WebGLRenderer`
+
+### getCamera()
+
+Returns the currently active camera based on the `camera` property.
+
+```javascript
+const activeCamera = scene.getCamera()
+```
+
+**Returns:** `THREE.PerspectiveCamera` - The active camera (freeCam, topCam, or sideCam)
+
+### setCameraAspect(ratio)
+
+Updates the aspect ratio of the active camera and its projection matrix.
+
+```javascript
+scene.setCameraAspect(16/9)
+```
+
+<ParamField path="ratio" type="number">
+  The new aspect ratio (width / height)
+</ParamField>
+
+### onWindowResize()
+
+Handles window resize events by updating camera aspect ratio and renderer size.
+
+```javascript
+window.addEventListener('resize', () => scene.onWindowResize())
+```
+
+### changeCamera(cam)
+
+Switches to a different camera view.
+
+```javascript
+scene.changeCamera(2) // Switch to top camera
+```
+
+<ParamField path="cam" type="number">
+  Camera index: 1 for freeCam, 2 for topCam, 3 for sideCam
+</ParamField>
+
+### onKeyDown(event)
+
+Handles keyboard input for camera switching and game controls.
+
+```javascript
+window.addEventListener('keydown', (event) => scene.onKeyDown(event))
+```
+
+<ParamField path="event" type="KeyboardEvent">
+  The keyboard event object
+</ParamField>
+
+**Key mappings:**
+- `1` - Switch to free camera
+- `2` - Switch to top camera
+- `3` - Switch to side camera
+- Other keys are passed to game controls
+
+### onMouseMove(event)
+
+Handles mouse movement for object selection and highlighting.
+
+```javascript
+window.addEventListener('mousemove', (event) => scene.onMouseMove(event))
+```
+
+<ParamField path="event" type="MouseEvent">
+  The mouse event object
+</ParamField>
+
+**Details:**
+- Uses raycasting to detect mouse hover over pickable objects
+- Calls `select()` on hovered objects and `deselect()` on others
+
+### onMouseClick(event)
+
+Handles mouse clicks for menu interaction and game start.
+
+```javascript
+window.addEventListener('click', (event) => scene.onMouseClick(event))
+```
+
+<ParamField path="event" type="MouseEvent">
+  The mouse event object
+</ParamField>
+
+**Details:**
+- When clicking menu items, removes menu and starts game
+- Changes status to "PACMAN" and switches to top camera
+
+### update()
+
+Main animation loop that updates and renders the scene.
+
+```javascript
+scene.update()
+```
+
+**Details:**
+- Calls `requestAnimationFrame` for continuous rendering
+- Updates camera controls
+- Makes title face the camera
+- Updates maze and game state
+- Renders the scene with the active camera
+
+## Example Usage
+
+```javascript
+// Initialize the scene
+const scene = new MyScene("#WebGL-output")
+
+// Set up event listeners
+window.addEventListener("resize", () => scene.onWindowResize())
+window.addEventListener("keydown", (event) => scene.onKeyDown(event))
+window.addEventListener("mousemove", (event) => scene.onMouseMove(event))
+window.addEventListener("click", (event) => scene.onMouseClick(event))
+
+// Start the animation loop
+scene.update()
+```
+
+## Camera Controls
+
+The free camera (camera 1) supports:
+- **Rotate:** Left mouse drag
+- **Zoom:** Mouse wheel
+- **Pan:** Right mouse drag
+
+Switch between cameras using number keys 1, 2, and 3.
+
+## Related Classes
+
+- [MyGame](/api/mygame) - Game logic and character management
+- [MyMaze](/api/mymaze) - Procedural maze generation

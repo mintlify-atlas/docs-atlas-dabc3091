@@ -1,0 +1,523 @@
+---
+title: 'AI Behavior and Pathfinding'
+description: 'A* pathfinding implementation and dynamic difficulty scaling for ghost AI'
+---
+
+# AI Behavior and Pathfinding
+
+The ghost AI in Procedural Pac-Man 3D uses **A* pathfinding** to navigate the procedurally-generated mazes intelligently. The system features multiple behavior states and dynamic difficulty scaling that adapts to player progression.
+
+## AI Architecture Overview
+
+The AI system consists of:
+
+- **Pathfinding Library**: `astar.js` - External A* implementation
+- **Behavior States**: Chase, scatter, scared, return, freeze, home
+- **Path Execution**: `executePath()` method in `MyGhost.js`
+- **Path Planning**: `moveAI()` method in `MyGame.js`
+- **Difficulty Scaling**: Dynamic adjustment of `updatePathTime` and `scareTime`
+
+## Ghost Behavior States
+
+Each ghost operates in one of six distinct states:
+
+| State | Description | Speed | Color | Behavior |
+|-------|-------------|-------|-------|----------|
+| **chase** | Actively pursuing Pac-Man | Normal (0.75×) | Original | Pathfind to Pac-Man |
+| **scatter** | Random wandering | Normal | Original | Pathfind to random position |
+| **scared** | Fleeing from Pac-Man | Normal | Blue | Pathfind to random position |
+| **return** | Returning to spawn | Fast (2×) | Invisible | Pathfind to home position |
+| **freeze** | Immobilized | 0 | Original | No movement |
+| **home** | Waiting in spawn | 0 | Original | No movement |
+
+### State Transitions
+
+<Steps>
+  <Step title="Game Start">
+    Ghosts begin in `home` state, waiting in the spawn area.
+  </Step>
+  
+  <Step title="Leave Home">
+    After a staggered delay (5000ms - level×100ms), ghosts transition to `chase`.
+  </Step>
+  
+  <Step title="Power Pill Activation">
+    When Pac-Man eats a power pill, ghosts switch to `scared` state.
+  </Step>
+  
+  <Step title="Scared Timeout">
+    After `scareTime` milliseconds, ghosts return to `chase`.
+  </Step>
+  
+  <Step title="Eaten by Pac-Man">
+    Scared ghosts hit by Pac-Man enter `return` state to respawn.
+  </Step>
+  
+  <Step title="Respawn Complete">
+    Upon reaching spawn, ghosts transition from `return` to `chase`.
+  </Step>
+</Steps>
+
+## A* Pathfinding Integration
+
+The game uses the `astar.js` library to compute optimal paths through the maze.
+
+### Path Computation
+
+```javascript
+// From MyGame.js - moveAI() method
+moveAI() {
+    for (var i = 1; i < this.characters.length; i++) {
+        var character = this.characters[i];
+        
+        // Only compute new path if current path is complete
+        if (character.path == null && 
+            (character.behaviour != "freeze" && character.behaviour != "home")) {
+            
+            // Get ghost's current position
+            let pos = new THREE.Vector2(
+                character.getPosition().x / MyConstant.BOX_SIZE, 
+                character.getPosition().z / MyConstant.BOX_SIZE
+            );
+            let dir = new THREE.Vector2(character.dirX, character.dirZ);
+            pos = character.adjustedPosition(pos, dir);
+            
+            // Deep copy maze data for pathfinding
+            var ghostMaze = [...this.maze.mazeData];
+            ghostMaze.forEach((row, rowIndex) => ghostMaze[rowIndex] = [...row]);
+            
+            // Prevent backtracking in chase mode
+            if (character.behaviour == "chase") {
+                ghostMaze[pos.y - dir.y][pos.x - dir.x] = 0;  // Block previous cell
+            }
+            
+            // Create A* graph from maze
+            var graph = new Graph(ghostMaze);
+            var start = graph.grid[pos.y][pos.x];
+            
+            // Determine target based on behavior
+            var end;
+            
+            if (character.behaviour == "chase") {
+                // Chase Pac-Man's current position
+                var pPos = new THREE.Vector2(
+                    this.characters[0].getPosition().x / MyConstant.BOX_SIZE, 
+                    this.characters[0].getPosition().z / MyConstant.BOX_SIZE
+                );
+                var pDir = new THREE.Vector2(
+                    this.characters[0].dirX, 
+                    this.characters[0].dirZ
+                );
+                pPos = this.characters[0].adjustedPosition(pPos, pDir);
+                end = graph.grid[pPos.y][pPos.x];
+            } 
+            else if (character.behaviour == "scape") {
+                // Flee to random position
+                var random = this.maze.getRandomValidPosition();
+                end = graph.grid[random.x][random.y];
+            } 
+            else if (character.behaviour == "return") {
+                // Return to spawn position
+                end = graph.grid[
+                    this.charactersSpawnPosition[i].z
+                ][
+                    this.charactersSpawnPosition[i].x
+                ];
+            }
+            
+            // Compute path using A*
+            var result = astar.search(graph, start, end);
+            
+            if (result.length == 0) {
+                result = null;
+            } else {
+                // Optional: visualize path for debugging
+                if (MyConstant.SHOW_PATH) {
+                    for (let path of result) {
+                        var pos_check = path.x * MyConstant.MAZE_WIDTH + path.y;
+                        this.maze.children[pos_check].square.material = character.material;
+                    }
+                }
+            }
+            
+            character.path = result;
+        }
+    }
+}
+```
+
+### Path Execution
+
+Once a path is computed, ghosts follow it step-by-step:
+
+```javascript
+// From MyGhost.js - executePath() method
+executePath() {
+    if (this.path != null) {
+        let pos = new THREE.Vector2(
+            this.getPosition().x / MyConstant.BOX_SIZE, 
+            this.getPosition().z / MyConstant.BOX_SIZE
+        );
+        let dir = new THREE.Vector2(this.dirX, this.dirZ);
+        
+        pos = this.adjustedPosition(pos, dir);
+        
+        // Check if reached current waypoint
+        if (pos.x == this.path[0].y && pos.y == this.path[0].x) {
+            this.path.shift();  // Remove reached waypoint
+            
+            if (this.path.length == 0) {
+                this.path = null;
+            }
+        }
+        
+        // Move toward next waypoint
+        if (this.path != null) {
+            var newDirX = this.path[0].y - pos.x;
+            var newDirZ = this.path[0].x - pos.y;
+            var newDir = new THREE.Vector2(newDirX, newDirZ);
+            this.rotate(newDir);  // Change direction
+        }
+        // Handle arrival at home after returning
+        else if (this.behaviour == "return") {
+            this.revive();
+        }
+    }
+}
+```
+
+<Note>
+The path is represented as an array of grid positions. Ghosts follow the path by moving toward each waypoint sequentially.
+</Note>
+
+## Behavior State Implementation
+
+### Chase Mode
+
+```javascript
+chase() {
+    this.changeColor(this.material);  // Restore original color
+    this.behaviour = "chase";
+    this.path = null;  // Force recomputation
+}
+```
+
+### Scared Mode
+
+```javascript
+scare() {
+    this.startInvencibleAnimation();  // Begin countdown
+    this.changeColor(MyMaterial.BLUE);  // Turn blue
+    this.behaviour = "scape";  // Note: "scape" is a typo for "escape"
+    this.path = null;  // Flee in new direction
+}
+```
+
+### Return Mode
+
+```javascript
+returnHome() {
+    this.stopInvencibleAnimation();  // Stop flashing
+    this.speed = this.speed * 2;  // Double speed
+    this.changeColor(MyMaterial.INVISIBLE);  // Become invisible
+    this.behaviour = "return";
+    this.path = null;  // Compute path to home
+}
+```
+
+### Revive After Return
+
+```javascript
+revive() {
+    this.speed = this.speed / 2;  // Restore normal speed
+    this.chase();  // Return to chase mode
+}
+```
+
+## Dynamic Difficulty Scaling
+
+Difficulty increases with each level through two primary mechanisms:
+
+### 1. Faster Path Updates
+
+Ghosts recalculate paths more frequently at higher levels:
+
+```javascript
+// From MyGame.js - nextLevel() method
+nextLevel() {
+    this.level += 1;
+    
+    // Reduce path update interval
+    var time = this.characters[1].updatePathTime - this.level * 200;
+    if (time < 2500) time = 2000;  // Minimum 2 seconds
+    
+    for (var i = 1; i < 5; i++) {
+        this.characters[i].setUpdatePathTime(time);
+    }
+    
+    // ... other level-up logic
+}
+```
+
+**Default**: 7500ms → **Level 10**: 5500ms → **Level 27+**: 2000ms (minimum)
+
+### 2. Shorter Scare Duration
+
+Power pills become less effective at higher levels:
+
+```javascript
+// From MyGame.js - nextLevel() method
+var duration = this.characters[1].scareTime - this.level * 500;
+if (duration < 100) duration = 100;  // Minimum 0.1 seconds
+
+for (var i = 1; i < 5; i++) {
+    this.characters[i].setScareTime(duration);
+}
+```
+
+**Default**: 10000ms → **Level 10**: 5000ms → **Level 20+**: 100ms (minimum)
+
+<Warning>
+At high levels, scare time becomes negligible (0.1s), making power pills nearly useless. This dramatically increases difficulty.
+</Warning>
+
+### Difficulty Progression Table
+
+| Level | Path Update Time | Scare Duration | Ghost Leave Delay |
+|-------|------------------|----------------|-------------------|
+| 1 | 7500ms | 10000ms | 5000ms |
+| 5 | 6500ms | 7500ms | 4600ms |
+| 10 | 5500ms | 5000ms | 4000ms |
+| 20 | 3500ms | 100ms | 3000ms |
+| 27+ | 2000ms | 100ms | 3000ms |
+
+## Path Update System
+
+Ghosts periodically reset their paths to adapt to Pac-Man's movement:
+
+```javascript
+// From MyGhost.js - startUpdatingPaths() method
+startUpdatingPaths() {
+    var that = this;
+    
+    this.updatePaths = new TWEEN.Tween(origin)
+        .duration(that.updatePathTime)
+        .onRepeat(function() {
+            if (that.behaviour == "chase") {
+                that.path = null;  // Trigger recomputation
+            }
+        })
+        .repeat(Infinity)
+        .start();
+}
+```
+
+This ensures ghosts continuously adapt their pursuit strategy rather than following outdated paths.
+
+## Scared State Animation
+
+When scared, ghosts flash blue and white before returning to normal:
+
+```javascript
+startInvencibleAnimation() {
+    var that = this;
+    
+    // Initial scared period
+    this.invencibleStartingAnimation = new TWEEN.Tween(origin)
+        .duration(that.scareTime)
+        .onComplete(function() {
+            that.invencibleEndingAnimation.start();
+        })
+        .start();
+    
+    // Flashing warning before recovery
+    var val = 1;
+    this.invencibleEndingAnimation = new TWEEN.Tween(origin)
+        .duration(500)  // 0.5 seconds per flash
+        .onRepeat(function() {
+            if (val % 2 == 0) {
+                that.changeColor(MyMaterial.BLUE);
+            } else {
+                that.changeColor(MyMaterial.WHITE);
+            }
+            val = val + 1;
+        })
+        .onComplete(function() {
+            that.chase();  // Return to normal
+        })
+        .repeat(9);  // 10 flashes total
+}
+```
+
+<Steps>
+  <Step title="Solid Blue Phase">
+    Ghost remains solid blue for `scareTime` milliseconds (initially 10 seconds).
+  </Step>
+  
+  <Step title="Flashing Warning">
+    Ghost alternates blue/white 10 times over 5 seconds.
+  </Step>
+  
+  <Step title="Return to Chase">
+    Ghost resumes original color and chase behavior.
+  </Step>
+</Steps>
+
+## Collision Detection
+
+The game checks for ghost-Pac-Man collisions every frame:
+
+```javascript
+// From MyGame.js - collisionManager() method
+for (var i = 1; i < 5; i++) {
+    if (this.characters[i].behaviour != "return") {
+        if (this.characters[i].hitbox.intersectsBox(this.characters[0].hitbox)) {
+            
+            if (this.characters[i].behaviour == "chase") {
+                // Pac-Man dies
+                for (var j = 1; j < 5; j++) {
+                    this.characters[j].behaviour = "freeze";
+                }
+                this.characters[0].die();
+            } 
+            else if (this.characters[i].behaviour == "scape") {
+                // Ghost gets eaten
+                this.characters[i].returnHome();
+                this.score += 100;
+                this.updateScoreValueText();
+            }
+        }
+    }
+}
+```
+
+## Anti-Backtracking Logic
+
+To prevent ghosts from oscillating back and forth, the chase mode blocks the previous position:
+
+```javascript
+// Prevent backtracking in chase mode
+if (character.behaviour == "chase") {
+    ghostMaze[pos.y - dir.y][pos.x - dir.x] = 0;  // Mark as wall
+}
+```
+
+This forces ghosts to commit to forward movement, making them more aggressive.
+
+<Note>
+Backtracking is only blocked in chase mode. Scared ghosts can reverse direction to flee more effectively.
+</Note>
+
+## Staggered Ghost Release
+
+Ghosts don't all leave the spawn area simultaneously:
+
+```javascript
+// From MyGame.js - startLeaveBoxAnimation() method
+startLeaveBoxAnimation() {
+    var val = 2;  // Start with ghost index 2 (first ghost is already out)
+    var duration = 5000 - this.level * 100;
+    if (duration < 3000) duration = 3000;  // Minimum 3 seconds
+    
+    var that = this;
+    
+    this.leaveBoxAnimation = new TWEEN.Tween(origin)
+        .duration(duration)
+        .onRepeat(function() {
+            that.characters[val].changeBehaviour("chase");
+            val = val + 1;
+        })
+        .repeat(3)  // 4 ghosts total
+        .start();
+}
+```
+
+**Timing**:
+- Ghost 1: Starts in chase mode immediately
+- Ghost 2: Leaves after `duration` ms
+- Ghost 3: Leaves after `2 × duration` ms
+- Ghost 4: Leaves after `3 × duration` ms
+
+## Performance Optimizations
+
+### Path Computation Throttling
+
+Paths are only recomputed when:
+1. Current path is complete (`path == null`)
+2. Ghost is not frozen or home
+3. Update timer expires (in chase mode)
+
+### Maze Copy Optimization
+
+```javascript
+// Shallow copy array, deep copy rows
+var ghostMaze = [...this.maze.mazeData];
+ghostMaze.forEach((row, rowIndex) => ghostMaze[rowIndex] = [...row]);
+```
+
+This avoids modifying the original maze data while minimizing copy overhead.
+
+### Path Visualization (Debug Mode)
+
+```javascript
+if (MyConstant.SHOW_PATH) {
+    for (let path of result) {
+        var pos_check = path.x * MyConstant.MAZE_WIDTH + path.y;
+        this.maze.children[pos_check].square.material = character.material;
+    }
+}
+```
+
+Path visualization can be toggled for debugging without affecting gameplay.
+
+## Advanced Strategies
+
+The AI system enables several sophisticated behaviors:
+
+<CardGroup cols={2}>
+  <Card title="Predictive Pursuit" icon="chess">
+    Ghosts target Pac-Man's current position, not predicted future position (simpler but still effective).
+  </Card>
+  
+  <Card title="Adaptive Difficulty" icon="chart-line">
+    Path update frequency and scare duration scale with player level.
+  </Card>
+  
+  <Card title="Strategic Retreat" icon="person-running">
+    Scared ghosts flee to random positions, creating unpredictable escape patterns.
+  </Card>
+  
+  <Card title="Coordinated Release" icon="users">
+    Staggered ghost release prevents overwhelming the player initially.
+  </Card>
+</CardGroup>
+
+## Future Enhancements
+
+Potential improvements to the AI system:
+
+- **Scatter Mode**: Implement classic Pac-Man scatter behavior where ghosts target corners
+- **Predictive Targeting**: Target Pac-Man's predicted future position based on velocity
+- **Personality Traits**: Give each ghost unique targeting strategies (e.g., ambush, chase, patrol)
+- **Difficulty Modes**: Allow players to select AI aggressiveness levels
+- **Group Tactics**: Coordinate ghosts to surround Pac-Man
+
+## A* Algorithm Explanation
+
+The A* algorithm finds the shortest path by:
+
+1. **Initialization**: Start with the ghost's position
+2. **Expansion**: Explore neighboring cells
+3. **Scoring**: Evaluate each cell using `f(n) = g(n) + h(n)`
+   - `g(n)`: Cost from start to cell n
+   - `h(n)`: Estimated cost from n to goal (Manhattan distance)
+4. **Selection**: Always expand the lowest-cost cell next
+5. **Termination**: Stop when goal is reached or no path exists
+
+<Note>
+A* guarantees the shortest path when the heuristic (h) never overestimates the true distance. Manhattan distance is perfect for grid-based movement.
+</Note>
+
+## Conclusion
+
+The AI behavior system combines A* pathfinding, state machines, and dynamic difficulty scaling to create challenging, adaptive ghost opponents. The procedural maze generation ensures that AI strategies must adapt to new layouts each game, preventing memorization and maintaining long-term challenge.

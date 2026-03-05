@@ -1,0 +1,198 @@
+---
+title: 'MyCharacter'
+description: 'Base character class for all movable entities in the game'
+---
+
+## Overview
+
+`MyCharacter` is the base class that extends `THREE.Object3D` and provides common functionality for all movable characters in the game (Pac-Man and ghosts). It handles positioning, collision detection, rotation, and movement.
+
+**Inheritance**: `THREE.Object3D` → `MyCharacter`
+
+## Constructor
+
+<ParamField path="pos" type="THREE.Vector3">
+  Initial position of the character in grid coordinates (will be multiplied by `MyConstant.BOX_SIZE`)
+</ParamField>
+
+<ParamField path="size" type="number">
+  Size of the character model
+</ParamField>
+
+```javascript
+const character = new MyCharacter(
+  new THREE.Vector3(1, 0, 1),
+  1.0
+);
+```
+
+## Properties
+
+### model
+```javascript
+THREE.Object3D
+```
+The 3D model container for the character's visual representation.
+
+### animated
+```javascript
+boolean
+```
+Flag indicating whether the character should play animations. Default: `true`
+
+### hitbox
+```javascript
+THREE.Box3
+```
+Collision detection bounding box. Set to 75% of `BOX_SIZE` for more forgiving collision detection.
+
+### helper
+```javascript
+THREE.Box3Helper | undefined
+```
+Visual helper for debugging hitbox. Only created when `MyConstant.SHOW_HITBOX` is true.
+
+### speed
+```javascript
+number
+```
+Movement speed in units per frame. Default: `0.15`
+
+### dirX
+```javascript
+number
+```
+Current direction on the X-axis (-1, 0, or 1).
+
+### dirZ
+```javascript
+number
+```
+Current direction on the Z-axis (-1, 0, or 1).
+
+## Methods
+
+### getPosition()
+Returns the current position of the character's model.
+
+**Returns**: `THREE.Vector3` - The model's position
+
+```javascript
+const position = character.getPosition();
+console.log(position.x, position.y, position.z);
+```
+
+### setPosition2D(pos2D)
+Sets the character's 2D position (X and Z axes only).
+
+**Parameters**:
+- `pos2D` (THREE.Vector2) - New X and Z coordinates
+
+```javascript
+character.setPosition2D(new THREE.Vector2(5.0, 3.0));
+```
+
+### getCollisionBox()
+Returns the character's collision bounding box.
+
+**Returns**: `THREE.Box3` - The hitbox used for collision detection
+
+```javascript
+const hitbox = character.getCollisionBox();
+if (hitbox.intersectsBox(otherBox)) {
+  // Handle collision
+}
+```
+
+### adjustedPosition(pos, dir)
+Calculates an adjusted grid-aligned position based on the current position and direction.
+
+**Parameters**:
+- `pos` (THREE.Vector2) - Current position in grid coordinates
+- `dir` (THREE.Vector2) - Current direction vector
+
+**Returns**: `THREE.Vector2` - Grid-aligned position
+
+```javascript
+const gridPos = character.adjustedPosition(
+  new THREE.Vector2(1.3, 2.7),
+  new THREE.Vector2(1, 0)
+);
+```
+
+### adjustPosition()
+Snaps the character to the nearest grid position based on current movement direction. Updates both model position and hitbox.
+
+```javascript
+// Snap character to grid when changing direction
+character.adjustPosition();
+```
+
+### rotate(dir)
+Rotates the character model to face the specified direction.
+
+**Parameters**:
+- `dir` (Object) - Direction object with `x` and `y` properties (values: -1, 0, or 1)
+
+**Direction mappings**:
+- `{x: 1, y: 0}` - Face right (rotation.y = 0)
+- `{x: -1, y: 0}` - Face left (rotation.y = π)
+- `{x: 0, y: 1}` - Face down (rotation.y = 3π/2)
+- `{x: 0, y: -1}` - Face up (rotation.y = π/2)
+
+```javascript
+// Make character face right
+character.rotate({x: 1, y: 0});
+
+// Make character face up
+character.rotate({x: 0, y: -1});
+```
+
+### update()
+Called every frame to update character state. Moves the character and updates the hitbox position.
+
+```javascript
+// In your animation loop
+function animate() {
+  character.update();
+  requestAnimationFrame(animate);
+}
+```
+
+## Usage Example
+
+```javascript
+// Create a character at grid position (5, 0, 10)
+const character = new MyCharacter(
+  new THREE.Vector3(5, 0, 10),
+  1.0
+);
+
+// Add to scene
+scene.add(character);
+
+// Set initial direction
+character.rotate({x: 1, y: 0});
+
+// Game loop
+function gameLoop() {
+  // Update character movement
+  character.update();
+  
+  // Check collision with wall
+  const charBox = character.getCollisionBox();
+  if (charBox.intersectsBox(wallBox)) {
+    // Stop movement or change direction
+    character.adjustPosition();
+  }
+  
+  requestAnimationFrame(gameLoop);
+}
+```
+
+## Notes
+
+- Position coordinates are automatically converted from grid coordinates to world coordinates by multiplying by `MyConstant.BOX_SIZE`
+- The hitbox is 75% of `BOX_SIZE` to allow smoother navigation through corridors
+- Movement is based on rotation: the character always moves forward in the direction it's facing
+- This class should typically be extended rather than instantiated directly

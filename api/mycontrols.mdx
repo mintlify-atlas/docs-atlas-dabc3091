@@ -1,0 +1,202 @@
+---
+title: 'MyControls'
+description: 'Keyboard input manager for player controls'
+---
+
+## Overview
+
+The `MyControls` class handles keyboard input for controlling Pac-Man's movement and accessing debug features. It maps key codes to game actions and provides a centralized manager for processing input events.
+
+## Constructor
+
+### `MyControls()`
+
+Initializes the controls with default key mappings.
+
+```javascript
+const controls = new MyControls();
+```
+
+## Key Mappings
+
+The class defines the following key code mappings:
+
+### Movement Controls
+
+<ParamField path="moveLeftKey" type="number" default="37">
+  Left arrow key - Move Pac-Man left.
+</ParamField>
+
+<ParamField path="moveUpKey" type="number" default="38">
+  Up arrow key - Move Pac-Man up.
+</ParamField>
+
+<ParamField path="moveRightKey" type="number" default="39">
+  Right arrow key - Move Pac-Man right.
+</ParamField>
+
+<ParamField path="moveDownKey" type="number" default="40">
+  Down arrow key - Move Pac-Man down.
+</ParamField>
+
+### Camera Controls
+
+<ParamField path="rotateLeftKey" type="number" default="81">
+  Q key - Rotate camera left.
+</ParamField>
+
+<ParamField path="rotateRightKey" type="number" default="69">
+  E key - Rotate camera right.
+</ParamField>
+
+### Action Keys
+
+<ParamField path="dieKey" type="number" default="32">
+  Space key - Trigger respawn (debug feature).
+</ParamField>
+
+<ParamField path="memoryKey" type="number" default="13">
+  Enter key - Display renderer memory info in console (debug feature).
+</ParamField>
+
+## Methods
+
+### `manager(keyCode, game, renderer)`
+
+Processes keyboard input and triggers appropriate game actions.
+
+<ParamField path="keyCode" type="number" required>
+  The key code of the pressed key (from keyboard event).
+</ParamField>
+
+<ParamField path="game" type="MyGame" required>
+  The game instance to control.
+</ParamField>
+
+<ParamField path="renderer" type="THREE.WebGLRenderer" required>
+  The THREE.js renderer instance (used for debug info).
+</ParamField>
+
+#### Behavior
+
+1. **Movement Keys**: Converts arrow key input into a direction vector and buffers the rotation for Pac-Man
+2. **Space Key**: Triggers game respawn
+3. **Enter Key**: Logs renderer memory information to console
+
+```javascript
+manager(keyCode, game, renderer) {
+  var dir = new THREE.Vector2(0,0);
+
+  if (keyCode == this.moveLeftKey) { dir.x = -1; }
+  if (keyCode == this.moveRightKey) { dir.x = 1; }
+  if (keyCode == this.moveDownKey) { dir.y = 1; }
+  if (keyCode == this.moveUpKey) { dir.y = -1; }
+  
+  if (keyCode == this.dieKey) {
+    game.respawn();
+  }
+
+  if (keyCode == this.memoryKey) {
+    console.log(renderer.info);
+  }
+
+  if (dir.x != 0 || dir.y != 0) {
+    game.characters[0].rotateBuffer(dir);
+  }
+}
+```
+
+## Usage Examples
+
+### Initialization
+
+```javascript
+// In MyScene constructor
+class MyScene extends THREE.Scene {
+  constructor() {
+    super();
+    this.controls = new MyControls();
+  }
+}
+```
+
+### Processing Keyboard Events
+
+```javascript
+// Keyboard event handler in MyScene
+keyboardManager(key) {
+  // Check for specific keys first (camera controls, etc.)
+  if (key == 81) { // Q key
+    this.cameraLeft();
+  } 
+  else if (key == 69) { // E key
+    this.cameraRight();
+  }
+  // Pass all other keys to controls manager
+  else {
+    this.controls.manager(key, this.game, this.renderer);
+  }
+}
+```
+
+### Custom Key Mappings
+
+```javascript
+// Override default keys if needed
+const controls = new MyControls();
+controls.moveLeftKey = 65;  // Change to 'A' key
+controls.moveRightKey = 68; // Change to 'D' key
+controls.moveUpKey = 87;    // Change to 'W' key
+controls.moveDownKey = 83;  // Change to 'S' key
+```
+
+### Direction Vector Mapping
+
+The controls convert key presses into 2D direction vectors:
+
+- **Left Arrow**: `dir = (-1, 0)` - Move in negative X direction
+- **Right Arrow**: `dir = (1, 0)` - Move in positive X direction
+- **Up Arrow**: `dir = (0, -1)` - Move in negative Y direction
+- **Down Arrow**: `dir = (0, 1)` - Move in positive Y direction
+
+These vectors are passed to Pac-Man's `rotateBuffer()` method to queue the next movement direction.
+
+## Control Flow
+
+```mermaid
+graph TD
+    A[Key Press Event] --> B[MyScene.keyboardManager]
+    B --> C{Camera Control?}
+    C -->|Yes Q/E| D[Rotate Camera]
+    C -->|No| E[MyControls.manager]
+    E --> F{Movement Key?}
+    F -->|Yes| G[Create Direction Vector]
+    G --> H[game.characters[0].rotateBuffer]
+    E --> I{Space Key?}
+    I -->|Yes| J[game.respawn]
+    E --> K{Enter Key?}
+    K -->|Yes| L[console.log renderer.info]
+```
+
+## Key Code Reference
+
+| Key | Code | Action |
+|-----|------|--------|
+| Q | 81 | Rotate camera left |
+| E | 69 | Rotate camera right |
+| ← | 37 | Move Pac-Man left |
+| ↑ | 38 | Move Pac-Man up |
+| → | 39 | Move Pac-Man right |
+| ↓ | 40 | Move Pac-Man down |
+| Space | 32 | Respawn (debug) |
+| Enter | 13 | Show renderer info (debug) |
+
+## Source Location
+
+**File**: `~/workspace/source/pacman/src/MyControls.js:1`
+
+## Related Classes
+
+- [MyScene](/api/myscene) - Initializes controls and handles keyboard events
+- [MyGame](/api/mygame) - Receives control commands for game actions
+- [MyCharacter](/api/mycharacter) - Processes buffered rotation from movement inputs

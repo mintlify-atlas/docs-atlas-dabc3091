@@ -1,0 +1,232 @@
+---
+title: 'MyMaterial'
+description: 'Predefined THREE.js materials for game objects and characters'
+---
+
+## Overview
+
+The `MyMaterial` class provides a centralized collection of `THREE.MeshStandardMaterial` definitions used throughout the game. This ensures consistent colors and visual appearance for all game elements including characters, UI elements, and maze components.
+
+## Character Materials
+
+### Pac-Man
+
+<ParamField path="YELLOW" type="THREE.MeshStandardMaterial">
+  Material for Pac-Man character.
+  
+  ```javascript
+  new THREE.MeshStandardMaterial({color: 0xFFFF00})
+  ```
+</ParamField>
+
+### Ghosts
+
+<ParamField path="RED_GHOST" type="THREE.MeshStandardMaterial">
+  Material for the red ghost (Blinky).
+  
+  ```javascript
+  new THREE.MeshStandardMaterial({color: 0xFF0000})
+  ```
+</ParamField>
+
+<ParamField path="PINK_GHOST" type="THREE.MeshStandardMaterial">
+  Material for the pink ghost (Pinky).
+  
+  ```javascript
+  new THREE.MeshStandardMaterial({color: 0xFFB8FF})
+  ```
+</ParamField>
+
+<ParamField path="BLUE_GHOST" type="THREE.MeshStandardMaterial">
+  Material for the blue ghost (Inky).
+  
+  ```javascript
+  new THREE.MeshStandardMaterial({color: 0x00FFFF})
+  ```
+</ParamField>
+
+<ParamField path="ORANGE_GHOST" type="THREE.MeshStandardMaterial">
+  Material for the orange ghost (Clyde).
+  
+  ```javascript
+  new THREE.MeshStandardMaterial({color: 0xFFB852})
+  ```
+</ParamField>
+
+## Basic Color Materials
+
+<ParamField path="RED" type="THREE.MeshStandardMaterial">
+  Pure red material.
+  
+  ```javascript
+  new THREE.MeshStandardMaterial({color: 0xFF0000})
+  ```
+</ParamField>
+
+<ParamField path="GREEN" type="THREE.MeshStandardMaterial">
+  Pure green material.
+  
+  ```javascript
+  new THREE.MeshStandardMaterial({color: 0x00FF00})
+  ```
+</ParamField>
+
+<ParamField path="BLUE" type="THREE.MeshStandardMaterial">
+  Pure blue material.
+  
+  ```javascript
+  new THREE.MeshStandardMaterial({color: 0x0000FF})
+  ```
+</ParamField>
+
+<ParamField path="CYAN" type="THREE.MeshStandardMaterial">
+  Cyan material.
+  
+  ```javascript
+  new THREE.MeshStandardMaterial({color: 0x00FFFF})
+  ```
+</ParamField>
+
+<ParamField path="PURPLE" type="THREE.MeshStandardMaterial">
+  Purple/magenta material.
+  
+  ```javascript
+  new THREE.MeshStandardMaterial({color: 0xFF00FF})
+  ```
+</ParamField>
+
+<ParamField path="WHITE" type="THREE.MeshStandardMaterial">
+  White material used for text, dots, and ghost eyes.
+  
+  ```javascript
+  new THREE.MeshStandardMaterial({color: 0xFFFFFF})
+  ```
+</ParamField>
+
+<ParamField path="BLACK" type="THREE.MeshStandardMaterial">
+  Black material used for ghost pupils and UI elements.
+  
+  ```javascript
+  new THREE.MeshStandardMaterial({color: 0x000000})
+  ```
+</ParamField>
+
+## Special Materials
+
+<ParamField path="TRANSPARENT" type="THREE.MeshStandardMaterial">
+  Semi-transparent white material with 10% opacity.
+  
+  ```javascript
+  new THREE.MeshStandardMaterial({color: 0xFFFFFF, opacity: 0.1, transparent: true})
+  ```
+</ParamField>
+
+<ParamField path="INVISIBLE" type="THREE.MeshStandardMaterial">
+  Fully invisible material used for hitboxes and hidden paths.
+  
+  ```javascript
+  new THREE.MeshStandardMaterial({color: 0xFFFFFF, opacity: 0.0, transparent: true})
+  ```
+</ParamField>
+
+## Usage Examples
+
+### Creating Pac-Man
+
+```javascript
+// Pac-Man uses the yellow material
+class MyPacman extends MyCharacter {
+  constructor(position, size, direction) {
+    super(position, size, direction);
+    this.material = MyMaterial.YELLOW;
+  }
+}
+```
+
+### Creating Ghosts
+
+```javascript
+// Create array of ghost materials
+var ghostMaterial = [
+  MyMaterial.RED_GHOST, 
+  MyMaterial.PINK_GHOST, 
+  MyMaterial.BLUE_GHOST, 
+  MyMaterial.ORANGE_GHOST
+];
+
+// Create each ghost with its corresponding material
+for(var i = 0; i < 4; i++){
+  var ghost = new MyGhost(
+    this.charactersSpawnPosition[i+1], 
+    MyConstant.CHARACTER_SIZE, 
+    direction, 
+    ghostMaterial[i]
+  );
+}
+```
+
+### Ghost Eyes
+
+```javascript
+// Create ghost eyeballs and pupils
+var rightEyeball = new THREE.Mesh(this.eyeGeom, MyMaterial.WHITE);
+var rightPupil = new THREE.Mesh(this.pupilGeom, MyMaterial.BLACK);
+
+var leftEyeball = new THREE.Mesh(this.eyeGeom, MyMaterial.WHITE);
+var leftPupil = new THREE.Mesh(this.pupilGeom, MyMaterial.BLACK);
+```
+
+### Maze Dots
+
+```javascript
+// Create collectible dots with white material
+this.dot = new THREE.Mesh(this.sphereGeom, MyMaterial.WHITE);
+```
+
+### Invisible Hitboxes
+
+```javascript
+// Create invisible square for pathfinding
+this.square = new THREE.Mesh(this.pathGeom, MyMaterial.INVISIBLE);
+
+// Create invisible cube for walls
+this.cube = new MyCube(position, MyMaterial.INVISIBLE, size);
+```
+
+### UI Text
+
+```javascript
+// Create score text with white material
+this.scoreText = new MyText(
+  scoreTextPosition,
+  'SCORE',
+  2,
+  MyMaterial.WHITE,
+  this.fontURL
+);
+
+// Create title with yellow material
+this.p = new MyText(posP, 'P', size, MyMaterial.YELLOW, fontURL);
+```
+
+### Ghost State Changes
+
+```javascript
+// Make ghost invisible when eaten
+this.changeColor(MyMaterial.INVISIBLE);
+
+// Flash white when frightened
+that.changeColor(MyMaterial.WHITE);
+```
+
+## Source Location
+
+**File**: `~/workspace/source/pacman/src/MyMaterial.js:1`
+
+## Related Classes
+
+- [MyPacman](/api/mypacman) - Uses YELLOW material
+- [MyGhost](/api/myghost) - Uses ghost-specific materials
+- [MyMaze](/api/mymaze) - Uses materials for maze tiles including WHITE for dots and INVISIBLE for paths
+- MyTile - Uses WHITE for dots and INVISIBLE for paths
+- MyText - Uses WHITE and BLACK for UI elements
