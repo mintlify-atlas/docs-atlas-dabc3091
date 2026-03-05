@@ -65,7 +65,8 @@
             "pages": [
               "api/myscene",
               "api/mygame",
-              "api/mymaze"
+              "api/mymaze",
+              "api/mytile"
             ]
           },
           {

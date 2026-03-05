@@ -1,0 +1,231 @@
+---
+title: "MyTile"
+description: "Individual maze tile with collision detection and visual representation"
+---
+
+## Overview
+
+`MyTile` represents a single cell in the maze grid. Each tile has a type (wall, empty, dot, pill, or teleport) and handles its own collision detection, visual rendering, and dot collection. Tiles are created by `MyMaze` during maze generation.
+
+**Extends**: `THREE.Object3D`
+
+## Constructor
+
+<ParamField path="position" type="THREE.Vector3" required>
+  World position for the tile center
+</ParamField>
+
+<ParamField path="type" type="string" required>
+  Tile type: `"wall"`, `"empty"`, `"dot"`, `"pill"`, or `"teleport"`
+</ParamField>
+
+<ParamField path="size" type="number" required>
+  Width/height/depth of the tile cube (typically `MyConstant.BOX_SIZE`)
+</ParamField>
+
+<ParamField path="has_hitbox" type="boolean" required>
+  Whether this tile has collision detection (walls and teleports have hitboxes)
+</ParamField>
+
+<ParamField path="maze_material" type="THREE.Material">
+  Optional procedurally generated material for wall tiles (Voronoi shader)
+</ParamField>
+
+```javascript
+// Create a wall tile with procedural texture
+const wallPosition = new THREE.Vector3(10, 0, 20);
+const wall = new MyTile(wallPosition, "wall", 2, true, shaderMaterial);
+
+// Create a dot tile
+const dotPosition = new THREE.Vector3(12, 0, 20);
+const dot = new MyTile(dotPosition, "dot", 2, false);
+
+// Create a teleport portal
+const portalPosition = new THREE.Vector3(0, 0, 14);
+const portal = new MyTile(portalPosition, "teleport", 2, true);
+```
+
+## Properties
+
+### has_hitbox
+**Type**: `boolean`
+
+Whether this tile has collision detection. Walls and teleports have hitboxes to prevent characters from passing through.
+
+### size
+**Type**: `number`
+
+The dimensions of the tile cube. Used for hitbox calculations and rendering.
+
+### hitbox
+**Type**: `THREE.Box3`
+
+Axis-aligned bounding box for collision detection. Only present if `has_hitbox` is true.
+
+### helper
+**Type**: `THREE.Box3Helper`
+
+Visual debug helper showing the hitbox. Only created if `MyConstant.SHOW_MAZE_HITBOX` is enabled.
+
+### square
+**Type**: `THREE.Mesh`
+
+Flat plane mesh used for pathfinding visualization. Material can be changed to show ghost paths during debugging.
+
+### cube
+**Type**: `MyCube`
+
+The main cube geometry representing the tile. For walls, this uses the procedural material. For empty tiles, it's invisible.
+
+### dot
+**Type**: `THREE.Mesh`
+
+Sphere mesh for collectible dots and power pills. Only present on `"dot"` and `"pill"` tiles.
+
+- **Dot size**: `size/6` radius (small sphere)
+- **Pill size**: `size/3` radius (large sphere)
+- **Material**: `MyMaterial.WHITE`
+
+### portal
+**Type**: `MyPortal`
+
+Animated portal effect for teleport tiles. Only present on `"teleport"` tiles.
+
+## Methods
+
+### getCollisionBox()
+
+Returns the tile's hitbox for collision detection.
+
+**Returns**: `THREE.Box3` - The axis-aligned bounding box
+
+```javascript
+const hitbox = tile.getCollisionBox();
+if (hitbox.intersectsBox(characterHitbox)) {
+  // Handle collision
+}
+```
+
+### dispose()
+
+Cleans up all geometries, materials, and helpers to free memory. Should be called when removing tiles from the scene.
+
+```javascript
+// Remove tile and clean up resources
+maze.remove(tile);
+tile.dispose();
+```
+
+**Disposes**:
+- Path plane geometry
+- Dot/pill sphere geometry (if present)
+- Hitbox helper geometry (if present)
+- Portal resources (if present)
+- Cube resources
+
+### update()
+
+Called each frame to update animated elements. Currently unused but available for future animations.
+
+## Tile Types
+
+### Wall Tiles
+
+```javascript
+type: "wall"
+has_hitbox: true
+```
+
+- Solid obstacles that block character movement
+- Use procedural Voronoi texture if `MyConstant.ACTIVE_SHADER` is enabled
+- Collision detection prevents characters from passing through
+
+### Empty Tiles
+
+```javascript
+type: "empty"
+has_hitbox: false
+```
+
+- Walkable paths with no collectibles
+- Invisible cube (used for pathfinding grid)
+- No collision detection
+
+### Dot Tiles
+
+```javascript
+type: "dot"
+has_hitbox: false
+```
+
+- Standard collectible dots (10 points each)
+- Small white sphere (`size/6` radius)
+- 244 dots per maze
+- Removed when Pac-Man collects them
+
+### Pill Tiles
+
+```javascript
+type: "pill"
+has_hitbox: false
+```
+
+- Power pills that enable ghost hunting (50 points each)
+- Large white sphere (`size/3` radius)
+- 4 pills per maze (corners)
+- Triggers scared ghost behavior when collected
+
+### Teleport Tiles
+
+```javascript
+type: "teleport"
+has_hitbox: true
+```
+
+- Portals at left/right maze edges
+- Animated torus with rotating texture
+- Collision detection triggers teleportation to opposite portal
+- Typically 1-2 portal pairs per maze
+
+## Usage in MyMaze
+
+Tiles are created during maze generation:
+
+```javascript MyMaze.js
+for (var i = 0; i < MyConstant.MAZE_HEIGHT; i++) {
+  for (var j = 0; j < MyConstant.MAZE_WIDTH; j++) {
+    var position = new THREE.Vector3(j * cubeSize, 0, i * cubeSize);
+    var tile;
+    
+    switch (this.mazeData[i][j]) {
+      case 0:
+        tile = new MyTile(position, "wall", cubeSize, true, this.shaderMaterial);
+        break;
+      case 1:
+        tile = new MyTile(position, "empty", cubeSize, false);
+        break;
+      case 2:
+        tile = new MyTile(position, "dot", cubeSize, false);
+        this.dotNumber += 1;
+        break;
+      case 3:
+        tile = new MyTile(position, "pill", cubeSize, false);
+        this.dotNumber += 1;
+        break;
+      case 4:
+        tile = new MyTile(position, "teleport", cubeSize, true);
+        break;
+    }
+    
+    this.add(tile);
+  }
+}
+```
+
+## Related Classes
+
+- [MyMaze](/api/mymaze) - Creates and manages all tiles in the maze grid
+- [MyMaterial](/api/mymaterial) - Provides materials for dots and visual effects
+- [MyConstant](/api/myconstant) - Defines BOX_SIZE and debug flags
+- MyCube - Low-level cube wrapper used internally
+- MyPortal - Animated portal effect for teleport tiles
