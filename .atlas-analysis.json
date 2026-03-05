@@ -1,0 +1,99 @@
+{
+  "projectType": "general",
+  "projectName": "Procedural Pac-Man 3D",
+  "projectDescription": "A 3D Pac-Man game implementation with procedural content generation built using Three.js without game engines",
+  "theme": "palm",
+  "primaryColor": "#FFD700",
+  "lightColor": "#4169E1",
+  "darkColor": "#1E3A8A",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Game Architecture",
+            "pages": [
+              "architecture/overview",
+              "architecture/scene-structure",
+              "architecture/game-loop"
+            ]
+          },
+          {
+            "group": "Procedural Generation",
+            "pages": [
+              "pcg/overview",
+              "pcg/maze-generation",
+              "pcg/texture-generation",
+              "pcg/ai-behavior"
+            ]
+          },
+          {
+            "group": "Game Components",
+            "pages": [
+              "components/characters",
+              "components/maze",
+              "components/controls"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core Classes",
+            "pages": [
+              "api/myscene",
+              "api/mygame",
+              "api/mymaze"
+            ]
+          },
+          {
+            "group": "Characters",
+            "pages": [
+              "api/mycharacter",
+              "api/mypacman",
+              "api/myghost"
+            ]
+          },
+          {
+            "group": "Utilities",
+            "pages": [
+              "api/myconstant",
+              "api/mymaterial",
+              "api/mycontrols"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Procedural maze generation using Tetris-piece-based algorithm",
+    "Voronoi tessellation for procedural wall textures",
+    "A* pathfinding for ghost AI navigation",
+    "3D graphics rendering with Three.js without game engines",
+    "Dynamic difficulty adjustment through procedural parameters",
+    "Multi-camera system for different viewing angles"
+  ],
+  "publicApiSurface": [
+    "MyScene",
+    "MyGame",
+    "MyMaze",
+    "MyPacman",
+    "MyGhost",
+    "MyCharacter",
+    "MyTile",
+    "MyMaterial",
+    "MyControls",
+    "MyConstant"
+  ]
+}
